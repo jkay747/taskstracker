@@ -1,0 +1,325 @@
+import Foundation
+
+// Records as they're stored in Supabase (see supabase/schema.sql). The web
+// app in web/index.html reads and writes exactly the same rows.
+
+/// Someone on a task: a member of the list (by account id), or just a name or
+/// email typed in for someone who hasn't joined yet.
+enum Person: Codable, Hashable {
+    case user(String)
+    case named(String)
+
+    private enum Keys: String, CodingKey { case id, name }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        if let id = try container.decodeIfPresent(String.self, forKey: .id) {
+            self = .user(id.lowercased())
+        } else {
+            self = .named(try container.decodeIfPresent(String.self, forKey: .name) ?? "")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: Keys.self)
+        switch self {
+        case .user(let id): try container.encode(id, forKey: .id)
+        case .named(let name): try container.encode(name, forKey: .name)
+        }
+    }
+
+    /// Same person, ignoring capitals and spaces in typed names.
+    var key: String {
+        switch self {
+        case .user(let id): return "u:" + id
+        case .named(let name): return "n:" + name.trimmingCharacters(in: .whitespaces).lowercased()
+        }
+    }
+
+    var isLinked: Bool { if case .user = self { return true } else { return false } }
+
+    static func typed(_ text: String) -> Person? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let value = trimmed.contains("@") ? trimmed.lowercased() : trimmed
+        return .named(String(value.prefix(120)))
+    }
+}
+
+struct TaskList: Codable, Identifiable, Equatable {
+    var id: String
+    var name: String
+    var weekOf: String?
+    var theme: String
+    var because: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, theme, because
+        case weekOf = "week_of"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id).lowercased()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Kay2-Do"
+        weekOf = try c.decodeIfPresent(String.self, forKey: .weekOf)
+        theme = try c.decodeIfPresent(String.self, forKey: .theme) ?? ""
+        because = try c.decodeIfPresent(String.self, forKey: .because) ?? ""
+    }
+}
+
+struct TaskCategory: Codable, Identifiable, Hashable {
+    var id: String
+    var listID: String
+    var key: String
+    var label: String
+    var color: Int
+    var sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, key, label, color
+        case listID = "list_id"
+        case sortOrder = "sort_order"
+    }
+
+    init(id: String, listID: String, key: String, label: String, color: Int, sortOrder: Int) {
+        self.id = id; self.listID = listID; self.key = key; self.label = label; self.color = color; self.sortOrder = sortOrder
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id).lowercased()
+        listID = try c.decode(String.self, forKey: .listID).lowercased()
+        key = try c.decode(String.self, forKey: .key)
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        color = try c.decodeIfPresent(Int.self, forKey: .color) ?? 0
+        sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
+    }
+
+    var name: String { label }
+}
+
+struct TaskItem: Codable, Identifiable, Equatable {
+    var id: String
+    var listID: String
+    var categoryKey: String?
+    var title: String
+    var notes: String
+    var done: Bool
+    var priority: Bool
+    /// "yyyy-MM-dd"
+    var due: String?
+    var owner: Person?
+    var shared: [Person]
+    var createdBy: String?
+    var createdAt: String?
+    var doneAt: String?
+    var doneBy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, notes, done, priority, due, owner, shared
+        case listID = "list_id"
+        case categoryKey = "category_key"
+        case createdBy = "created_by"
+        case createdAt = "created_at"
+        case doneAt = "done_at"
+        case doneBy = "done_by"
+    }
+
+    init(id: String, listID: String, categoryKey: String?, title: String, createdBy: String) {
+        self.id = id
+        self.listID = listID
+        self.categoryKey = categoryKey
+        self.title = title
+        notes = ""
+        done = false
+        priority = false
+        due = nil
+        owner = nil
+        shared = []
+        self.createdBy = createdBy
+        createdAt = Timestamp.string(Date())
+        doneAt = nil
+        doneBy = nil
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id).lowercased()
+        listID = try c.decode(String.self, forKey: .listID).lowercased()
+        categoryKey = try c.decodeIfPresent(String.self, forKey: .categoryKey)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? false
+        priority = try c.decodeIfPresent(Bool.self, forKey: .priority) ?? false
+        due = try c.decodeIfPresent(String.self, forKey: .due)
+        owner = try? c.decodeIfPresent(Person.self, forKey: .owner)
+        shared = (try? c.decodeIfPresent([Person].self, forKey: .shared)) ?? []
+        createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)?.lowercased()
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+        doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt)
+        doneBy = try c.decodeIfPresent(String.self, forKey: .doneBy)?.lowercased()
+    }
+
+    /// What the app writes. Empty values are sent as null so a cleared due
+    /// date or owner is cleared on the server too.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(listID, forKey: .listID)
+        try c.encode(categoryKey, forKey: .categoryKey)
+        try c.encode(String(title.prefix(300)), forKey: .title)
+        try c.encode(String(notes.prefix(4000)), forKey: .notes)
+        try c.encode(done, forKey: .done)
+        try c.encode(priority, forKey: .priority)
+        try c.encode(due, forKey: .due)
+        try c.encode(owner, forKey: .owner)
+        try c.encode(shared, forKey: .shared)
+        if let createdBy { try c.encode(createdBy, forKey: .createdBy) }
+        try c.encode(doneAt, forKey: .doneAt)
+        try c.encode(doneBy, forKey: .doneBy)
+    }
+
+    var dueDate: Date? { DayString.date(due) }
+    var created: Date { Timestamp.parse(createdAt) ?? .distantPast }
+    var completed: Date? { Timestamp.parse(doneAt) }
+    var people: [Person] { (owner.map { [$0] } ?? []) + shared }
+
+    var isLate: Bool {
+        guard !done, let due = dueDate else { return false }
+        return due < Calendar.current.startOfDay(for: Date())
+    }
+
+    func involves(_ person: Person) -> Bool {
+        people.contains { $0.key == person.key }
+    }
+
+    mutating func setDone(_ value: Bool, by userID: String) {
+        done = value
+        doneAt = value ? Timestamp.string(Date()) : nil
+        doneBy = value ? userID : nil
+    }
+
+    /// Open before done; starred first; then soonest due date; then oldest.
+    static func order(_ a: TaskItem, _ b: TaskItem) -> Bool {
+        if a.done != b.done { return !a.done }
+        if a.done { return (a.completed ?? .distantPast) > (b.completed ?? .distantPast) }
+        if a.priority != b.priority { return a.priority }
+        if a.due != b.due {
+            guard let x = a.due else { return false }
+            guard let y = b.due else { return true }
+            return x < y
+        }
+        return a.created < b.created
+    }
+}
+
+/// Someone on a list, or a pending invite (from the list_people function).
+struct Member: Decodable, Hashable, Identifiable {
+    var userID: String?
+    var email: String?
+    var displayName: String?
+    var role: String
+    var pending: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case email, role, pending
+        case userID = "user_id"
+        case displayName = "display_name"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        userID = try c.decodeIfPresent(String.self, forKey: .userID)?.lowercased()
+        email = try c.decodeIfPresent(String.self, forKey: .email)
+        displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        role = try c.decodeIfPresent(String.self, forKey: .role) ?? "contributor"
+        pending = try c.decodeIfPresent(Bool.self, forKey: .pending) ?? false
+    }
+
+    var id: String { userID ?? ("invite:" + (email ?? "")) }
+    var name: String {
+        if let displayName, !displayName.isEmpty { return displayName }
+        return email ?? "Someone"
+    }
+    var roleLabel: String { Role.label(role) }
+}
+
+enum Role {
+    static let assignable = ["contributor", "editor"]
+    static func label(_ role: String) -> String {
+        switch role {
+        case "owner": return "Owner"
+        case "editor": return "Editor"
+        default: return "Contributor"
+        }
+    }
+}
+
+enum Timestamp {
+    private static let formatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    /// Reads Postgres timestamps like 2026-11-17T17:38:23.022027+00:00.
+    static func parse(_ text: String?) -> Date? {
+        guard var s = text, !s.isEmpty else { return nil }
+        if let dot = s.firstIndex(of: ".") {
+            var end = s.index(after: dot)
+            while end < s.endIndex, s[end].isNumber { end = s.index(after: end) }
+            s.removeSubrange(dot..<end)
+        }
+        // "+00" → "+00:00"
+        if let sign = s.dropLast(2).last, sign == "+" || sign == "-", s.contains("T") || s.contains(" ") {
+            s += ":00"
+        }
+        s = s.replacingOccurrences(of: " ", with: "T")
+        return formatter.date(from: s)
+    }
+
+    static func string(_ date: Date) -> String { formatter.string(from: date) }
+}
+
+/// Calendar days as "yyyy-MM-dd", in the device's own time zone.
+enum DayString {
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static func date(_ text: String?) -> Date? {
+        guard let text, !text.isEmpty else { return nil }
+        formatter.timeZone = .current
+        return formatter.date(from: String(text.prefix(10)))
+    }
+
+    static func string(_ date: Date) -> String {
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+}
+
+enum Slug {
+    static func make(_ label: String, taken: Set<String>) -> String {
+        let mapped = label.lowercased().unicodeScalars.map { scalar -> String in
+            let isLetter = scalar.value >= 97 && scalar.value <= 122
+            let isDigit = scalar.value >= 48 && scalar.value <= 57
+            return (isLetter || isDigit) ? String(scalar) : "-"
+        }.joined()
+        var base = mapped.split(separator: "-").joined(separator: "-")
+        base = String(base.prefix(30))
+        if base.isEmpty { base = "cat" }
+        var key = base
+        var n = 2
+        while taken.contains(key) {
+            key = "\(base)-\(n)"
+            n += 1
+        }
+        return key
+    }
+}

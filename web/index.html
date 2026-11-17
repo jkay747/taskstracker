@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kay2-Do</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+/* A planner sheet: ruled lines, boxed category headers, square checkboxes; one column per category, or one wide sheet when a category is picked. */
+:root {
+  --paper: #fbfbf9; --sheet: #ffffff; --ink: #17181c; --muted: #6b6e78; --rule: #d9dae0; --accent: #2443d6;
+  --k0: #1f8a70; --k1: #2443d6; --k2: #8a2f6b; --k3: #b06d00; --k4: #0e7490; --k5: #b4361f; --k6: #5b6b1a; --k7: #6d4bc4;
+  --danger: #c2321f; --danger-bg: #fdecea; --hover: #f1f2f6;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121317; --sheet: #191b21; --ink: #ecedf1; --muted: #9a9daa; --rule: #30333d; --accent: #7d93ff;
+    --k0: #4cc3a2; --k1: #7d93ff; --k2: #d77ab6; --k3: #e3a440; --k4: #4cc0de; --k5: #f0856e; --k6: #b5c95a; --k7: #a98cf5;
+    --danger: #ff7a66; --danger-bg: #3a1f1c; --hover: #22252d; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 20px clamp(16px, 3vw, 36px) 48px; display: grid; gap: 22px; }
+.label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.muted { color: var(--muted); }
+
+.mast { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 16px; }
+.mast h1 { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 600; font-size: clamp(30px, 4.4vw, 46px); line-height: 1; text-align: center; text-wrap: balance; }
+.mast h1 .dash { color: var(--muted); font-weight: 400; }
+.weekof { display: flex; align-items: baseline; gap: 10px; }
+.weekof input { border: 0; border-bottom: 1px dotted var(--muted); background: transparent; padding: 2px 0; min-width: 140px; }
+.mast .right { justify-self: end; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.whoami { font-size: 13px; color: var(--muted); }
+.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.listpick { border: 1px solid var(--rule); background: var(--sheet); padding: 4px 6px; font-size: 13px; }
+
+.theme { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 10px 14px; align-items: baseline; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+.theme em { font-family: var(--font-display); font-style: italic; color: var(--muted); white-space: nowrap; }
+.theme input { width: 100%; border: 0; border-bottom: 1px dotted var(--muted); background: transparent; padding: 3px 0; }
+
+.banner { border: 1px solid var(--rule); background: var(--sheet); border-left: 4px solid var(--accent); padding: 10px 14px; font-size: 14px; display: grid; gap: 8px; }
+.banner p { margin: 0; max-width: 75ch; }
+
+.summary { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 22px; }
+.prio h2, .tally h2 { margin: 0 0 10px; }
+.prio ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.prio li { border: 1px solid var(--rule); background: var(--sheet); padding: 10px 12px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; min-height: 64px; }
+.prio .num { font-family: var(--font-display); font-style: italic; font-size: 22px; line-height: 1; color: var(--muted); }
+.prio .ptitle { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; font-weight: 600; }
+.prio .ptitle:hover { text-decoration: underline; }
+.prio .pmeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.prio li.empty { color: var(--muted); font-size: 13px; align-items: center; }
+.tally .rows { display: grid; gap: 7px; }
+.tally .row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 28px; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; font-size: 14px; }
+.tally .row strong { text-align: right; }
+.tally .swatch { width: 10px; height: 10px; }
+.tally .bar { height: 3px; background: var(--rule); grid-column: 2 / -1; }
+.tally .bar i { display: block; height: 100%; }
+.pill { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; }
+.pill.late { color: var(--danger); background: var(--danger-bg); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; justify-content: space-between; border-top: 1px solid var(--rule); padding-top: 14px; }
+.viewpick { display: flex; gap: 10px; align-items: center; }
+.viewpick select { border: 1.5px solid var(--ink); background: var(--sheet); padding: 8px 12px; font-weight: 600; min-width: 230px; cursor: pointer; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+.filters select, .filters input[type="search"] { border: 1px solid var(--rule); background: var(--sheet); padding: 6px 8px; }
+.filters label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 22px; align-items: start; }
+.board.single { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
+.col { display: grid; }
+.colhead { border: 1.5px solid var(--ink); background: var(--sheet); padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 5px solid var(--cat); margin-bottom: 4px; }
+.colhead h3 { margin: 0; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700; overflow-wrap: anywhere; }
+.colhead .count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 9px 2px 8px; border-bottom: 1px dotted var(--muted); }
+.task:hover { background: var(--hover); }
+.task.mine { box-shadow: inset 3px 0 0 var(--accent); }
+.box { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 2px 0 0 2px; border: 1.6px solid var(--ink); border-radius: 3px; cursor: pointer; display: grid; place-items: center; background: var(--sheet); }
+.box:checked { background: var(--ink); }
+.box:checked::after { content: ""; width: 8px; height: 4px; border-left: 2px solid var(--paper); border-bottom: 2px solid var(--paper); transform: rotate(-45deg) translate(1px, -1px); }
+.box:disabled { cursor: not-allowed; opacity: .4; }
+.task .body { min-width: 0; }
+.task .ttl { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; width: 100%; overflow-wrap: anywhere; }
+.task .ttl:hover { text-decoration: underline; text-decoration-color: var(--muted); }
+.task.done .ttl { text-decoration: line-through; color: var(--muted); }
+.task .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); margin-top: 3px; align-items: center; }
+.who { display: inline-flex; align-items: center; gap: 5px; }
+.av { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; font-size: 9px; font-weight: 700; color: #fff; }
+.invited { font-style: italic; }
+.due.late { color: var(--danger); font-weight: 600; }
+.star { background: none; border: 0; cursor: pointer; padding: 0 2px; font-size: 17px; line-height: 1; color: var(--rule); }
+.star[aria-pressed="true"] { color: var(--k3); }
+.star:hover:not(:disabled) { color: var(--k3); }
+.star:disabled { cursor: default; }
+.add { display: flex; gap: 8px; align-items: center; padding: 9px 2px; border-bottom: 1px dotted var(--muted); }
+.add span { width: 16px; height: 16px; border: 1.6px dashed var(--muted); border-radius: 3px; margin-left: 2px; flex: none; }
+.add input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; }
+.add input::placeholder { color: var(--muted); }
+.emptycol { padding: 14px 2px; color: var(--muted); font-size: 13px; border-bottom: 1px dotted var(--muted); }
+.donehdr { margin-top: 14px; padding: 6px 2px; }
+
+.scrim { position: fixed; inset: 0; background: rgba(10, 11, 15, .45); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.panel { width: min(580px, 100%); max-height: calc(100% - 16px); overflow: auto; background: var(--sheet); border: 1.5px solid var(--ink); border-top: 6px solid var(--cat, var(--ink)); padding: 20px 22px; display: grid; gap: 14px; }
+.panel h2 { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 600; font-size: 24px; }
+.field { display: grid; gap: 5px; }
+.field > label, .field > .label { color: var(--muted); }
+.field input[type="text"], .field input[type="date"], .field input[type="url"], .field input[type="email"], .field textarea, .field select { width: 100%; border: 1px solid var(--rule); background: var(--paper); padding: 8px 10px; }
+.field textarea { min-height: 80px; resize: vertical; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: end; }
+.chk2 { display: flex; gap: 8px; align-items: center; cursor: pointer; padding: 8px 0; }
+.picker { position: relative; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chips:empty { display: none; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--rule); background: var(--paper); padding: 3px 4px; border-radius: 99px; font-size: 13px; }
+.chip button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; font-size: 14px; line-height: 1; }
+.picker input { width: 100%; border: 1px solid var(--rule); background: var(--paper); padding: 8px 10px; }
+.menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 2; background: var(--sheet); border: 1px solid var(--ink); max-height: 240px; overflow: auto; }
+.menu button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; cursor: pointer; font-size: 14px; }
+.menu button:hover, .menu button.on { background: var(--hover); }
+.menu .sub { color: var(--muted); font-size: 12px; margin-left: auto; }
+.hint { font-size: 12px; color: var(--muted); max-width: 70ch; }
+.inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.actions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--rule); padding-top: 14px; }
+.actions .r { display: flex; gap: 8px; }
+.btn { border: 1.5px solid var(--ink); background: var(--sheet); padding: 8px 16px; cursor: pointer; font-weight: 600; }
+.btn.sm { padding: 5px 10px; font-size: 13px; }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.btn:disabled { opacity: .5; cursor: default; }
+.confirm { display: flex; gap: 8px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+.created { font-size: 12px; color: var(--muted); }
+.readnote { font-size: 13px; color: var(--muted); border-left: 3px solid var(--rule); padding-left: 10px; }
+
+.catlist, .peoplelist { display: grid; gap: 8px; }
+.catrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 6px; align-items: center; }
+.catrow input { border: 1px solid var(--rule); background: var(--paper); padding: 7px 9px; width: 100%; }
+.personrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font-size: 14px; }
+.personrow select { border: 1px solid var(--rule); background: var(--paper); padding: 4px 6px; }
+.swbtn { width: 28px; height: 28px; border: 1.5px solid var(--ink); cursor: pointer; padding: 0; }
+.iconbtn { border: 1px solid var(--rule); background: var(--paper); width: 30px; height: 30px; cursor: pointer; }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.catmove { grid-column: 2 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--danger); }
+.catmove select { border: 1px solid var(--rule); background: var(--paper); padding: 5px 7px; color: var(--ink); }
+.errline { color: var(--danger); font-size: 13px; }
+.okline { color: var(--k0); font-size: 13px; }
+
+.gate { max-width: 460px; margin: 10vh auto 0; display: grid; gap: 16px; }
+.gate h1 { margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 600; font-size: 40px; }
+.gate p { margin: 0; color: var(--muted); }
+.gate .field input { font-size: 16px; }
+textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule); background: var(--paper); padding: 8px 10px; font-size: 13px; }
+
+@media (max-width: 1080px) { .summary { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .mast { grid-template-columns: 1fr; } .mast h1 { text-align: left; } .mast .right { justify-self: start; justify-content: flex-start; }
+  .theme { grid-template-columns: 1fr; }
+  .prio ol { grid-template-columns: 1fr; }
+  .two { grid-template-columns: 1fr; }
+  .viewpick select { min-width: 0; width: 100%; }
+}
+@media print {
+  .toolbar, .add, .star, .mast .right, .banner, .scrim { display: none !important; }
+  body { background: #fff; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- Connect to Supabase (only when config.js is blank) -->
+<form class="gate wrap" id="connectGate" hidden>
+  <h1>Kay2-Do</h1>
+  <p>Connect this page to your Supabase project. Find both values in Supabase under <strong>Project Settings → API</strong>. They're kept in this browser only.</p>
+  <div class="field"><label class="label" for="cUrl">Project URL</label><input id="cUrl" type="url" placeholder="https://xxxx.supabase.co" required></div>
+  <div class="field"><label class="label" for="cKey">anon public key</label><input id="cKey" type="text" autocomplete="off" required></div>
+  <div class="errline" id="cErr"></div>
+  <div><button class="btn primary" type="submit">Connect</button></div>
+</form>
+
+<!-- Sign in with an emailed code -->
+<form class="gate wrap" id="signinGate" hidden>
+  <h1>Kay2-Do</h1>
+  <p id="siLead">Sign in with your email. We'll send you a 6-digit code.</p>
+  <div class="field" id="siEmailField"><label class="label" for="siEmail">Email</label><input id="siEmail" type="email" autocomplete="email" required></div>
+  <div class="field" id="siCodeField" hidden><label class="label" for="siCode">Code from the email</label><input id="siCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+  <div class="errline" id="siErr"></div>
+  <div class="inline"><button class="btn primary" type="submit" id="siGo">Send code</button><button class="linkbtn" type="button" id="siBack" hidden>Use a different email</button></div>
+  <div class="hint" id="siHint" hidden>The email can also have a sign-in link; opening it on this device works too.</div>
+</form>
+
+<!-- No list yet -->
+<div class="gate wrap" id="nolistGate" hidden>
+  <h1>Kay2-Do</h1>
+  <p>You're signed in as <strong id="nlWho"></strong> but aren't on a list yet. Make your own, or ask whoever shares a list with you to invite this email address.</p>
+  <div class="field"><label class="label" for="nlName">List name</label><input id="nlName" type="text" maxlength="60" value="Kay2-Do"></div>
+  <div class="errline" id="nlErr"></div>
+  <div class="inline"><button class="btn primary" type="button" id="nlCreate">Create my list</button><button class="linkbtn" type="button" id="nlRefresh">Check for invites again</button><button class="linkbtn" type="button" id="nlOut">Sign out</button></div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header class="mast">
+    <div class="weekof"><label class="label" for="weekOf">Week of</label><input id="weekOf" type="date"></div>
+    <h1><span class="dash">—</span> <span id="listName">Kay2-Do</span> <span class="dash">—</span></h1>
+    <div class="right">
+      <select class="listpick" id="listPick" aria-label="Switch list" hidden></select>
+      <button type="button" class="linkbtn" id="settingsBtn">List settings</button>
+      <span class="whoami" id="whoami"></span>
+      <button type="button" class="linkbtn" id="signOut">Sign out</button>
+    </div>
+  </header>
+
+  <div class="theme">
+    <em>This week will be…</em><input id="themeText" type="text" maxlength="140" aria-label="This week will be">
+    <em>because…</em><input id="themeWhy" type="text" maxlength="140" aria-label="Because">
+  </div>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="summary">
+    <div class="prio"><h2 class="label">Top priorities</h2><ol id="prioList"></ol></div>
+    <div class="tally"><h2 class="label">Open by category</h2><div class="rows" id="tally"></div></div>
+  </section>
+
+  <div class="toolbar">
+    <div class="viewpick"><label class="label" for="viewSel">Category</label><select id="viewSel"></select></div>
+    <div class="filters">
+      <label for="ownerFilter" class="muted">Owner</label>
+      <select id="ownerFilter"></select>
+      <input id="q" type="search" placeholder="Search tasks" aria-label="Search tasks">
+      <label class="chk"><input id="showDone" type="checkbox"> Show completed</label>
+      <button type="button" class="btn sm" id="printBtn">Save as PDF</button>
+    </div>
+  </div>
+
+  <main class="board" id="board"></main>
+</div>
+
+<!-- Task editor -->
+<div class="scrim" id="scrim" hidden>
+  <form class="panel" id="editor" role="dialog" aria-modal="true" aria-labelledby="edTitle">
+    <h2 id="edTitle">Edit task</h2>
+    <div class="readnote" id="edReadNote" hidden></div>
+    <div class="field"><label class="label" for="fTitle">Task</label><input id="fTitle" type="text" maxlength="300" required></div>
+    <div class="two">
+      <div class="field"><label class="label" for="fCat">Category</label><select id="fCat"></select></div>
+      <div class="field"><label class="label" for="fDue">Due</label><input id="fDue" type="date"></div>
+    </div>
+    <div class="field">
+      <label class="label" for="fOwnerIn">Owner</label>
+      <div class="picker"><div class="chips" id="ownerChips"></div><input id="fOwnerIn" type="text" autocomplete="off" placeholder="Pick someone on this list, or type a name or email"><div class="menu" id="ownerMenu" hidden></div></div>
+    </div>
+    <div class="field">
+      <label class="label" for="fShareIn">Also on this task</label>
+      <div class="picker"><div class="chips" id="shareChips"></div><input id="fShareIn" type="text" autocomplete="off" placeholder="Add people who should see and help with this"><div class="menu" id="shareMenu" hidden></div></div>
+      <div class="hint" id="peopleHint">The owner and everyone on a task can check it off. To give someone access to the list, invite their email under List settings → People; tasks you assigned to that email link to them when they sign in.</div>
+    </div>
+    <div class="two">
+      <label class="chk2"><input id="fPrio" type="checkbox"> Top priority</label>
+      <label class="chk2"><input id="fDone" type="checkbox"> Completed</label>
+    </div>
+    <div class="field"><label class="label" for="fNotes">Notes</label><textarea id="fNotes" maxlength="4000"></textarea></div>
+    <div class="created" id="fCreated"></div>
+    <div class="actions">
+      <div>
+        <button type="button" class="btn danger" id="delBtn">Delete</button>
+        <span class="confirm" id="delConfirm" hidden>Delete this task? <button type="button" class="btn danger sm" id="delYes">Delete</button><button type="button" class="btn sm" id="delNo">Keep</button></span>
+      </div>
+      <div class="r"><button type="button" class="btn" id="cancelBtn">Cancel</button><button type="submit" class="btn primary" id="saveBtn">Save</button></div>
+    </div>
+  </form>
+</div>
+
+<!-- List settings -->
+<div class="scrim" id="setScrim" hidden>
+  <form class="panel" id="setPanel" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle">List settings</h2>
+    <div class="field"><label class="label" for="sMyName">Your name</label><input id="sMyName" type="text" maxlength="80"><div class="hint">How you appear to everyone on your lists.</div></div>
+    <div id="managerSettings">
+      <div class="field"><label class="label" for="sName">List name</label><input id="sName" type="text" maxlength="60"></div>
+      <div class="field" style="margin-top:14px">
+        <span class="label">Categories</span>
+        <div class="catlist" id="catList"></div>
+        <div class="inline"><input id="newCat" type="text" maxlength="40" placeholder="New category name" aria-label="New category name" style="flex:1;min-width:0;border:1px solid var(--rule);background:var(--paper);padding:7px 9px"><button type="button" class="btn sm" id="addCat">Add category</button></div>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">People</span>
+      <div class="peoplelist" id="peopleList"></div>
+      <div id="inviteForm" class="field">
+        <div class="inline"><input id="invEmail" type="email" placeholder="Email to invite" aria-label="Email to invite" style="flex:1;min-width:180px;border:1px solid var(--rule);background:var(--paper);padding:7px 9px">
+          <select id="invRole" aria-label="Role" style="border:1px solid var(--rule);background:var(--paper);padding:7px 9px"><option value="contributor">Contributor</option><option value="editor">Editor</option></select>
+          <button type="button" class="btn sm" id="invGo">Invite</button></div>
+        <div class="hint">Contributors add tasks and check off their own. Editors can change anything except who's on the list. Invites don't send an email by themselves: use <strong>Copy invite message</strong> and send it to them.</div>
+        <div class="inline"><button type="button" class="btn sm" id="copyInvite">Copy invite message</button><span class="hint" id="copyStatus"></span></div>
+        <textarea class="copybox" id="inviteText" readonly hidden aria-label="Invite message"></textarea>
+      </div>
+      <div class="inline"><button type="button" class="linkbtn" id="leaveList" hidden>Leave this list</button></div>
+    </div>
+    <div class="errline" id="setErr"></div>
+    <div class="actions"><span></span><div class="r"><button type="button" class="btn" id="setCancel">Cancel</button><button type="submit" class="btn primary">Save settings</button></div></div>
+  </form>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const NCOLORS = 8;
+  const UNCAT = { key: "__none", label: "Uncategorized", color: -1 };
+  const LS = {
+    get(k) { try { return localStorage.getItem("k2." + k); } catch (e) { return null; } },
+    set(k, v) { try { if (v == null) localStorage.removeItem("k2." + k); else localStorage.setItem("k2." + k, v); } catch (e) {} }
+  };
+
+  const S = {
+    sb: null, meId: null, meEmail: "", meName: "",
+    lists: [], roles: {}, listId: null, list: null, role: null,
+    cats: [], tasks: new Map(), people: [],
+    view: "all", ownerFilter: "all", q: "", showDone: LS.get("showDone") === "1"
+  };
+  const isManager = () => S.role === "owner" || S.role === "editor";
+
+  // ---------- helpers ----------
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "text") el.textContent = v;
+      else if (k === "style") el.setAttribute("style", v);
+      else if (k === "value") el.value = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return el;
+  }
+  const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  function fmtDue(s) {
+    if (!s) return "";
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d); const t = new Date(); t.setHours(0, 0, 0, 0);
+    const diff = Math.round((dt - t) / 86400000);
+    if (diff === 0) return "Due today"; if (diff === 1) return "Due tomorrow"; if (diff === -1) return "Due yesterday";
+    const opts = { month: "short", day: "numeric" }; if (y !== t.getFullYear()) opts.year = "numeric";
+    return (diff < 0 ? "Was due " : "Due ") + dt.toLocaleDateString(undefined, opts);
+  }
+  const isLate = t => !t.done && t.due && t.due < todayStr();
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+  const isEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  const personKey = p => p ? (p.id ? "u:" + p.id : "n:" + (p.name || "").trim().toLowerCase()) : "";
+  const cleanPerson = p => p && (p.id ? { id: String(p.id) } : (p.name && String(p.name).trim() ? { name: String(p.name).trim().slice(0, 120) } : null));
+  const colorVar = i => i < 0 ? "var(--muted)" : "var(--k" + (((i % NCOLORS) + NCOLORS) % NCOLORS) + ")";
+  const catOf = key => S.cats.find(c => c.key === key) || UNCAT;
+  const ms = s => s ? Date.parse(s) : null;
+  const iso = n => n ? new Date(n).toISOString() : null;
+  const meKey = () => S.meId ? "u:" + S.meId : "";
+  const involvesMe = t => !!S.meId && (personKey(t.owner) === meKey() || t.shared.some(p => personKey(p) === meKey()));
+  const canEditTask = t => !!S.role && (isManager() || involvesMe(t) || (S.meId && t.createdBy === S.meId));
+  const canDeleteTask = t => !!S.role && (isManager() || (S.meId && t.createdBy === S.meId));
+  const appLink = () => location.origin + location.pathname;
+
+  function fromRow(r) {
+    return {
+      id: r.id, title: r.title || "(untitled)", category: r.category_key || "", done: !!r.done, priority: !!r.priority,
+      due: r.due || null, notes: r.notes || "", owner: cleanPerson(r.owner),
+      shared: Array.isArray(r.shared) ? r.shared.map(cleanPerson).filter(Boolean) : [],
+      createdBy: r.created_by || null, createdAt: ms(r.created_at) || 0, doneAt: ms(r.done_at), doneBy: r.done_by || null
+    };
+  }
+  function toRow(t) {
+    return { list_id: S.listId, category_key: t.category || null, title: t.title.slice(0, 300), notes: (t.notes || "").slice(0, 4000),
+      done: t.done, priority: t.priority, due: t.due || null, owner: t.owner || null, shared: t.shared || [],
+      done_at: iso(t.doneAt), done_by: t.doneBy || null };
+  }
+  function blankTask(patch) {
+    return Object.assign({ id: null, title: "", category: S.cats[0] ? S.cats[0].key : "", done: false, priority: false, due: null, notes: "",
+      owner: null, shared: [], createdBy: S.meId, createdAt: Date.now(), doneAt: null, doneBy: null }, patch || {});
+  }
+  function sortTasks(a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (a.done && b.done) return (b.doneAt || 0) - (a.doneAt || 0);
+    if (a.priority !== b.priority) return a.priority ? -1 : 1;
+    if (a.due !== b.due) { if (!a.due) return 1; if (!b.due) return -1; return a.due < b.due ? -1 : 1; }
+    return a.createdAt - b.createdAt;
+  }
+
+  // ---------- people ----------
+  function personRecord(id) { return S.people.find(p => p.user_id === id); }
+  function personName(p) {
+    if (!p) return "";
+    if (p.id) {
+      const r = personRecord(p.id);
+      const n = (r && r.display_name) || (p.id === S.meId ? S.meName : "") || "Someone";
+      return p.id === S.meId ? n + " (you)" : n;
+    }
+    return p.name;
+  }
+  function initials(n) { return (n || "?").replace(/@.*/, "").replace(/\(you\)/, "").split(/[\s._-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?"; }
+  function hashColor(s) { let x = 0; for (const c of s) x = (x * 31 + c.charCodeAt(0)) >>> 0; return "hsl(" + (x % 360) + " 40% 42%)"; }
+  function avatar(p) { const n = personName(p); return h("span", { class: "av", style: "background:" + hashColor(n), text: initials(n), "aria-hidden": "true" }); }
+  function whoEl(p) { return h("span", { class: "who" + (p.id ? "" : " invited"), title: p.id ? null : "Not linked to an account yet" }, avatar(p), h("span", { text: personName(p) })); }
+
+  // ---------- banner ----------
+  function showBanner(msg) { const b = $("banner"); if (!msg) { b.hidden = true; return; } b.textContent = msg; b.hidden = false; }
+  function failed(err, what) {
+    console.error(what, err);
+    const m = err && (err.message || err.error_description || String(err));
+    if (/row-level security|permission/i.test(m || "")) showBanner("You don't have permission to " + what + ". Ask the list owner to make you an editor.");
+    else showBanner("Couldn't " + what + ". " + (m || "Check your connection and try again."));
+    scheduleReload(0);
+  }
+
+  // ---------- gates ----------
+  function show(which) {
+    ["connectGate", "signinGate", "nolistGate", "app"].forEach(id => { $(id).hidden = id !== which; });
+  }
+
+  function config() {
+    const c = window.KAY2DO_CONFIG || {};
+    let url = (c.supabaseUrl || "").trim(), key = (c.supabaseAnonKey || "").trim();
+    if (!url || !key) { url = LS.get("url") || ""; key = LS.get("key") || ""; }
+    return url && key ? { url, key } : null;
+  }
+
+  $("connectGate").addEventListener("submit", e => {
+    e.preventDefault();
+    const url = $("cUrl").value.trim().replace(/\/+$/, ""), key = $("cKey").value.trim();
+    if (!/^https:\/\/.+/.test(url)) { $("cErr").textContent = "The project URL starts with https://"; return; }
+    LS.set("url", url); LS.set("key", key); start();
+  });
+
+  let pendingEmail = "";
+  function resetSignin() {
+    pendingEmail = ""; $("siEmailField").hidden = false; $("siCodeField").hidden = true; $("siBack").hidden = true; $("siHint").hidden = true;
+    $("siGo").textContent = "Send code"; $("siLead").textContent = "Sign in with your email. We'll send you a 6-digit code."; $("siErr").textContent = "";
+  }
+  $("siBack").addEventListener("click", resetSignin);
+  $("signinGate").addEventListener("submit", async e => {
+    e.preventDefault();
+    $("siErr").textContent = ""; $("siGo").disabled = true;
+    try {
+      if (!pendingEmail) {
+        const email = $("siEmail").value.trim().toLowerCase();
+        if (!isEmail(email)) { $("siErr").textContent = "That email address doesn't look complete."; return; }
+        const { error } = await S.sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: appLink() } });
+        if (error) throw error;
+        pendingEmail = email;
+        $("siEmailField").hidden = true; $("siCodeField").hidden = false; $("siBack").hidden = false; $("siHint").hidden = false;
+        $("siLead").textContent = "We sent a code to " + email + ". Enter it below.";
+        $("siGo").textContent = "Sign in"; setTimeout(() => $("siCode").focus(), 0);
+      } else {
+        const token = $("siCode").value.replace(/\s/g, "");
+        if (!token) { $("siCode").focus(); return; }
+        const { error } = await S.sb.auth.verifyOtp({ email: pendingEmail, token, type: "email" });
+        if (error) throw error;
+      }
+    } catch (err) {
+      $("siErr").textContent = (err && err.message) || "That didn't work. Try again.";
+    } finally { $("siGo").disabled = false; }
+  });
+
+  $("nlCreate").addEventListener("click", async () => {
+    $("nlErr").textContent = ""; $("nlCreate").disabled = true;
+    const { data, error } = await S.sb.rpc("create_list", { p_name: $("nlName").value.trim() || "Kay2-Do" });
+    $("nlCreate").disabled = false;
+    if (error) { $("nlErr").textContent = error.message; return; }
+    LS.set("list", data); loadLists();
+  });
+  $("nlRefresh").addEventListener("click", () => afterSignIn());
+  $("nlOut").addEventListener("click", () => S.sb.auth.signOut());
+  $("signOut").addEventListener("click", () => S.sb.auth.signOut());
+
+  // ---------- loading ----------
+  let channel = null, reloadTimer = null, loading = false, reloadAgain = false;
+  function scheduleReload(delay) { clearTimeout(reloadTimer); reloadTimer = setTimeout(reloadList, delay == null ? 250 : delay); }
+
+  async function afterSignIn() {
+    const { data: { user } } = await S.sb.auth.getUser();
+    if (!user) { show("signinGate"); return; }
+    S.meId = user.id; S.meEmail = (user.email || "").toLowerCase();
+    try { await S.sb.rpc("accept_invites"); } catch (e) {}
+    const { data: prof } = await S.sb.from("profiles").select("display_name").eq("id", S.meId).maybeSingle();
+    S.meName = (prof && prof.display_name) || S.meEmail.split("@")[0];
+    $("whoami").textContent = S.meName;
+    await loadLists();
+  }
+
+  async function loadLists() {
+    const [{ data: lists, error }, { data: mem }] = await Promise.all([
+      S.sb.from("lists").select("*").order("created_at"),
+      S.sb.from("list_members").select("list_id, role").eq("user_id", S.meId)
+    ]);
+    if (error) { show("app"); failed(error, "load your lists"); return; }
+    S.lists = lists || []; S.roles = {};
+    (mem || []).forEach(m => { S.roles[m.list_id] = m.role; });
+    if (!S.lists.length) { $("nlWho").textContent = S.meEmail; show("nolistGate"); return; }
+    const saved = LS.get("list");
+    const pick = S.lists.find(l => l.id === saved) || S.lists[0];
+    await openList(pick.id);
+  }
+
+  async function openList(id) {
+    S.listId = id; LS.set("list", id);
+    S.tasks = new Map(); S.cats = []; S.people = [];
+    drawListPick(); show("app");
+    if (channel) { S.sb.removeChannel(channel); channel = null; }
+    channel = S.sb.channel("list-" + id)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: "list_id=eq." + id }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "categories", filter: "list_id=eq." + id }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lists", filter: "id=eq." + id }, () => scheduleReload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "list_members", filter: "list_id=eq." + id }, () => scheduleReload())
+      .subscribe();
+    await reloadList();
+  }
+
+  async function reloadList() {
+    if (!S.listId) return;
+    if (loading) { reloadAgain = true; return; }
+    loading = true;
+    try {
+      const id = S.listId;
+      const [l, c, t, p, m] = await Promise.all([
+        S.sb.from("lists").select("*").eq("id", id).maybeSingle(),
+        S.sb.from("categories").select("*").eq("list_id", id).order("sort_order").order("created_at"),
+        S.sb.from("tasks").select("*").eq("list_id", id),
+        S.sb.rpc("list_people", { p_list: id }),
+        S.sb.from("list_members").select("role").eq("list_id", id).eq("user_id", S.meId).maybeSingle()
+      ]);
+      if (id !== S.listId) return;
+      const err = l.error || c.error || t.error;
+      if (err) { failed(err, "load the list"); return; }
+      if (!l.data || !m.data) { showBanner("You're no longer on that list."); LS.set("list", null); await loadLists(); return; }
+      S.list = l.data; S.role = m.data.role;
+      S.cats = (c.data || []).map(r => ({ id: r.id, key: r.key, label: r.label, color: r.color, sort: r.sort_order }));
+      S.tasks = new Map((t.data || []).map(r => [r.id, fromRow(r)]));
+      S.people = p.data || [];
+      if (!draft && $("setScrim").hidden) showBanner("");
+      applyWeek(); render();
+    } finally {
+      loading = false;
+      if (reloadAgain) { reloadAgain = false; scheduleReload(); }
+    }
+  }
+
+  function drawListPick() {
+    const sel = $("listPick");
+    sel.hidden = S.lists.length < 2;
+    sel.replaceChildren(...S.lists.map(l => h("option", { value: l.id, text: l.name })), h("option", { value: "__new", text: "New list…" }));
+    sel.value = S.listId;
+  }
+  $("listPick").addEventListener("change", async e => {
+    if (e.target.value === "__new") {
+      e.target.value = S.listId;
+      const name = prompt("Name for the new list", "Kay2-Do");
+      if (!name) return;
+      const { data, error } = await S.sb.rpc("create_list", { p_name: name });
+      if (error) { failed(error, "create the list"); return; }
+      LS.set("list", data); await loadLists(); return;
+    }
+    openList(e.target.value);
+  });
+
+  // ---------- writes ----------
+  async function saveTask(t, isNew) {
+    S.tasks.set(t.id, t); render();
+    const row = toRow(t);
+    const res = isNew
+      ? await S.sb.from("tasks").insert(Object.assign({ id: t.id, created_by: S.meId }, row))
+      : await S.sb.from("tasks").update(row).eq("id", t.id);
+    if (res.error) failed(res.error, "save that task");
+  }
+  async function removeTask(id) {
+    S.tasks.delete(id); render();
+    const { error } = await S.sb.from("tasks").delete().eq("id", id);
+    if (error) failed(error, "delete that task");
+  }
+  function patchTask(id, patch) { const t = S.tasks.get(id); if (t) saveTask(Object.assign({}, t, patch), false); }
+
+  function applyWeek() {
+    const l = S.list || {};
+    $("listName").textContent = l.name || "Kay2-Do";
+    document.title = l.name || "Kay2-Do";
+    if (document.activeElement !== $("weekOf")) $("weekOf").value = l.week_of || "";
+    if (document.activeElement !== $("themeText")) $("themeText").value = l.theme || "";
+    if (document.activeElement !== $("themeWhy")) $("themeWhy").value = l.because || "";
+  }
+  async function saveWeek() {
+    if (!S.list || !isManager()) return;
+    const w = { week_of: $("weekOf").value || null, theme: $("themeText").value.slice(0, 140), because: $("themeWhy").value.slice(0, 140) };
+    if (w.week_of === (S.list.week_of || null) && w.theme === (S.list.theme || "") && w.because === (S.list.because || "")) return;
+    Object.assign(S.list, w);
+    const { error } = await S.sb.from("lists").update(w).eq("id", S.listId);
+    if (error) failed(error, "save the weekly theme");
+  }
+
+  // ---------- filters ----------
+  function matches(t) {
+    if (!S.showDone && t.done) return false;
+    if (S.q) { const q = S.q.toLowerCase(); if (!(t.title.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q))) return false; }
+    const f = S.ownerFilter;
+    if (f === "mine") { if (!involvesMe(t)) return false; }
+    else if (f === "none") { if (t.owner) return false; }
+    else if (f !== "all") { if (personKey(t.owner) !== f && !t.shared.some(p => personKey(p) === f)) return false; }
+    return true;
+  }
+
+  // ---------- render ----------
+  function render() {
+    const all = [...S.tasks.values()];
+    drawViewSel(all); drawOwnerFilter(all); drawSummary(all); drawBoard(all);
+    ["themeText", "themeWhy", "weekOf"].forEach(id => $(id).disabled = !isManager());
+  }
+  function boardCats(all) {
+    const list = S.cats.slice();
+    if (all.some(t => catOf(t.category) === UNCAT)) list.push(UNCAT);
+    return list;
+  }
+  function drawViewSel(all) {
+    const sel = $("viewSel");
+    const open = all.filter(t => !t.done);
+    const opts = [h("option", { value: "all", text: "All categories (" + open.length + " open)" })];
+    boardCats(all).forEach(c => opts.push(h("option", { value: c.key, text: c.label + " (" + open.filter(t => catOf(t.category) === c).length + ")" })));
+    if (isManager()) opts.push(h("option", { value: "__manage", text: "Edit categories…" }));
+    sel.replaceChildren(...opts);
+    if (S.view !== "all" && !boardCats(all).some(c => c.key === S.view)) S.view = "all";
+    sel.value = S.view;
+  }
+  function drawOwnerFilter(all) {
+    const sel = $("ownerFilter"); const cur = S.ownerFilter;
+    const people = new Map();
+    S.people.forEach(p => { if (p.user_id && p.user_id !== S.meId) people.set("u:" + p.user_id, { id: p.user_id }); });
+    all.forEach(t => [t.owner, ...t.shared].forEach(p => { if (p && !(p.id && p.id === S.meId)) people.set(personKey(p), p); }));
+    sel.replaceChildren(h("option", { value: "all", text: "Everyone" }), h("option", { value: "mine", text: "Mine (owned or on)" }), h("option", { value: "none", text: "Unassigned" }));
+    [...people.entries()].sort((a, b) => personName(a[1]).localeCompare(personName(b[1]))).forEach(([k, p]) => sel.append(h("option", { value: k, text: personName(p) + (p.id ? "" : " (not linked)") })));
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : "all";
+    S.ownerFilter = sel.value;
+  }
+  function drawSummary(all) {
+    const open = all.filter(t => !t.done);
+    const pr = open.filter(t => t.priority).sort(sortTasks);
+    const ol = $("prioList"); ol.replaceChildren();
+    for (let i = 0; i < 3; i++) {
+      const t = pr[i];
+      if (!t) { ol.append(h("li", { class: "empty" }, h("span", { class: "num", text: i + 1 }), h("span", { text: i === 0 && !pr.length ? "Star a task to make it a top priority." : "Open slot" }))); continue; }
+      const c = catOf(t.category);
+      ol.append(h("li", { style: "border-left:4px solid " + colorVar(c.color) },
+        h("span", { class: "num", text: i + 1 }),
+        h("div", null,
+          h("button", { class: "ptitle", type: "button", text: t.title, onclick: () => openEditor(t.id) }),
+          h("div", { class: "pmeta" }, c.label, t.owner ? " · " + personName(t.owner) : "", t.due ? " · " + fmtDue(t.due) : ""))));
+    }
+    if (pr.length > 3) ol.append(h("li", { class: "empty", style: "grid-column:1/-1;min-height:0" }, h("span"), h("span", { text: "+" + (pr.length - 3) + " more starred task" + (pr.length - 3 === 1 ? "" : "s") + " in the lists below" })));
+    const tally = $("tally"); tally.replaceChildren();
+    const cats = boardCats(all);
+    const counts = cats.map(c => open.filter(t => catOf(t.category) === c).length);
+    const max = Math.max(1, ...counts);
+    cats.forEach((c, i) => {
+      const n = counts[i];
+      const late = open.filter(t => catOf(t.category) === c && isLate(t)).length;
+      tally.append(h("div", { class: "row" },
+        h("span", { class: "swatch", style: "background:" + colorVar(c.color) }),
+        h("span", { text: c.label }),
+        late ? h("span", { class: "pill late", text: late + " overdue" }) : h("span"),
+        h("strong", { text: n }),
+        h("span"), h("div", { class: "bar" }, h("i", { style: "width:" + (n / max * 100) + "%;background:" + colorVar(c.color) }))));
+    });
+  }
+  function taskRow(t) {
+    const editable = canEditTask(t);
+    const meta = [];
+    if (t.owner) meta.push(whoEl(t.owner));
+    if (t.due) meta.push(h("span", { class: "due" + (isLate(t) ? " late" : ""), text: fmtDue(t.due) }));
+    if (t.shared.length) meta.push(h("span", { title: t.shared.map(personName).join(", "), text: "+ " + (t.shared.length === 1 ? personName(t.shared[0]) : t.shared.length + " others") }));
+    if (t.done && t.doneBy && t.doneBy !== (t.owner && t.owner.id)) meta.push(h("span", { text: "Checked off by " + personName({ id: t.doneBy }) }));
+    if (t.notes) meta.push(h("span", { text: "Notes" }));
+    return h("div", { class: "task" + (t.done ? " done" : "") + (involvesMe(t) && !isManager() ? " mine" : "") },
+      h("input", { type: "checkbox", class: "box", checked: t.done, disabled: !editable,
+        title: editable ? null : "Only this task's owner, the people on it, or the list's editors can check it off",
+        "aria-label": "Mark “" + t.title + "” " + (t.done ? "not done" : "done"),
+        onchange: e => patchTask(t.id, { done: e.target.checked, doneAt: e.target.checked ? Date.now() : null, doneBy: e.target.checked ? S.meId : null }) }),
+      h("div", { class: "body" },
+        h("button", { class: "ttl", type: "button", text: t.title, onclick: () => openEditor(t.id) }),
+        meta.length ? h("div", { class: "meta" }, meta) : null),
+      h("button", { class: "star", type: "button", "aria-pressed": String(t.priority), disabled: !editable, title: t.priority ? "Remove from top priorities" : "Make a top priority", "aria-label": t.priority ? "Remove from top priorities" : "Make a top priority", text: "★",
+        onclick: () => patchTask(t.id, { priority: !t.priority }) }));
+  }
+  function addRow(c) {
+    if (!S.role || c === UNCAT) return null;
+    const inp = h("input", { type: "text", maxlength: "300", placeholder: "Add to " + c.label + "…", "aria-label": "Add a task to " + c.label,
+      onkeydown: e => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const v = inp.value.trim(); if (!v) return;
+        let owner = null;
+        if (!isManager() || S.ownerFilter === "mine") owner = { id: S.meId };
+        else if (S.ownerFilter.startsWith("u:")) owner = { id: S.ownerFilter.slice(2) };
+        saveTask(blankTask({ id: newId(), title: v, category: c.key, owner }), true);
+        inp.value = "";
+        requestAnimationFrame(() => { const again = document.querySelector('[data-add="' + c.key + '"] input'); if (again) again.focus(); });
+      } });
+    return h("div", { class: "add", "data-add": c.key }, h("span"), inp);
+  }
+  function drawBoard(all) {
+    const board = $("board"); board.replaceChildren();
+    const cats = S.view === "all" ? boardCats(all) : [catOf(S.view)];
+    board.classList.toggle("single", S.view !== "all");
+    cats.forEach(c => {
+      const inCat = all.filter(t => catOf(t.category) === c);
+      const list = inCat.filter(matches).sort(sortTasks);
+      const openN = inCat.filter(t => !t.done).length, doneN = inCat.length - openN;
+      const col = h("section", { class: "col", style: "--cat:" + colorVar(c.color), "aria-label": c.label },
+        h("div", { class: "colhead" }, h("h3", { text: c.label }), h("span", { class: "count", text: openN + " open" + (doneN ? " · " + doneN + " done" : "") })));
+      const open = list.filter(t => !t.done), done = list.filter(t => t.done);
+      open.forEach(t => col.append(taskRow(t)));
+      const add = addRow(c); if (add) col.append(add);
+      if (!open.length && (S.q || S.ownerFilter !== "all") && inCat.some(t => !t.done)) col.append(h("div", { class: "emptycol", text: "No open tasks match these filters." }));
+      else if (!open.length && !add) col.append(h("div", { class: "emptycol", text: "Nothing open here." }));
+      if (done.length) { col.append(h("div", { class: "label muted donehdr", text: "Completed" })); done.forEach(t => col.append(taskRow(t))); }
+      board.append(col);
+    });
+  }
+
+  // ---------- view ----------
+  function setView(key) {
+    S.view = key;
+    const hash = key === "all" ? "" : "c-" + key;
+    if ((location.hash.slice(1) || "") !== hash) { if (hash) location.hash = hash; else history.replaceState(null, "", location.pathname + location.search); }
+    render();
+  }
+  function readHash() { const hs = location.hash.slice(1); S.view = hs.startsWith("c-") ? hs.slice(2) : "all"; }
+  window.addEventListener("hashchange", () => { if (location.hash.includes("access_token")) return; readHash(); render(); });
+  $("viewSel").addEventListener("change", e => {
+    if (e.target.value === "__manage") { e.target.value = S.view; openSettings(); return; }
+    setView(e.target.value);
+  });
+
+  // ---------- task editor ----------
+  let draft = null;
+  function openEditor(id) {
+    const t = id ? S.tasks.get(id) : null;
+    if (id && !t) return;
+    draft = JSON.parse(JSON.stringify(t || blankTask({ category: S.view !== "all" ? S.view : undefined })));
+    draft.isNew = !t;
+    const editable = draft.isNew ? !!S.role : canEditTask(t);
+    draft.editable = editable;
+    $("edTitle").textContent = editable ? (draft.isNew ? "New task" : "Edit task") : "Task";
+    $("edReadNote").hidden = editable;
+    $("edReadNote").textContent = "Only this task's owner, the people on it, or the list's editors can change it.";
+    $("fTitle").value = draft.isNew ? "" : draft.title;
+    const fc = $("fCat");
+    fc.replaceChildren(...S.cats.map(c => h("option", { value: c.key, text: c.label })), catOf(draft.category) === UNCAT ? h("option", { value: draft.category, text: "Uncategorized" }) : null);
+    fc.value = draft.category;
+    setEditorColor();
+    $("fDue").value = draft.due || "";
+    $("fPrio").checked = draft.priority;
+    $("fNotes").value = draft.notes;
+    $("fDone").checked = draft.done;
+    const bits = [];
+    if (!draft.isNew && draft.createdAt) bits.push("Added " + new Date(draft.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) + (draft.createdBy ? " by " + personName({ id: draft.createdBy }) : ""));
+    if (draft.done && draft.doneBy) bits.push("checked off by " + personName({ id: draft.doneBy }));
+    $("fCreated").textContent = bits.join(", ");
+    drawPeople();
+    $("delConfirm").hidden = true; $("delBtn").hidden = draft.isNew || !canDeleteTask(t);
+    $("saveBtn").hidden = !editable;
+    $("cancelBtn").textContent = editable ? "Cancel" : "Close";
+    $("editor").querySelectorAll("input,textarea,select").forEach(el => { el.disabled = !editable; });
+    $("scrim").hidden = false;
+    setTimeout(() => (editable ? $("fTitle") : $("cancelBtn")).focus(), 0);
+  }
+  function setEditorColor() { $("editor").style.setProperty("--cat", colorVar(catOf($("fCat").value).color)); }
+  $("fCat").addEventListener("change", setEditorColor);
+  function closeEditor() { $("scrim").hidden = true; draft = null; closeMenus(); }
+  function chip(p, onRemove) {
+    return h("span", { class: "chip" }, avatar(p), h("span", { text: personName(p) + (p.id ? "" : " · not linked") }),
+      draft && draft.editable ? h("button", { type: "button", "aria-label": "Remove " + personName(p), text: "×", onclick: onRemove }) : null);
+  }
+  function drawPeople() {
+    const oc = $("ownerChips"); oc.replaceChildren();
+    if (draft.owner) oc.append(chip(draft.owner, () => { draft.owner = null; drawPeople(); }));
+    $("fOwnerIn").hidden = !!draft.owner || !draft.editable;
+    const sc = $("shareChips"); sc.replaceChildren();
+    draft.shared.forEach((p, i) => sc.append(chip(p, () => { draft.shared.splice(i, 1); drawPeople(); })));
+    $("fShareIn").hidden = !draft.editable;
+  }
+  function knownNames() {
+    const m = new Map();
+    S.tasks.forEach(t => [t.owner, ...t.shared].forEach(p => { if (p && p.name) m.set(personKey(p), p); }));
+    S.people.forEach(p => { if (p.pending) m.set("n:" + p.email, { name: p.email }); });
+    return [...m.values()];
+  }
+  function closeMenus() { $("ownerMenu").hidden = true; $("shareMenu").hidden = true; }
+  function setupPicker(inputId, menuId, onPick, excludeKeys) {
+    const inp = $(inputId), menu = $(menuId);
+    let items = [], active = -1;
+    function refresh() {
+      const q = inp.value.trim(); const ql = q.toLowerCase();
+      const ex = new Set(excludeKeys()); const opts = []; const added = new Set();
+      const push = (p, sub) => { const k = personKey(p); if (ex.has(k) || added.has(k)) return; added.add(k); opts.push({ p, sub }); };
+      if (S.meId && (!ql || "me you".includes(ql) || S.meName.toLowerCase().includes(ql))) push({ id: S.meId }, "You");
+      S.people.forEach(r => {
+        if (!r.user_id) return;
+        const n = (r.display_name || "") + " " + (r.email || "");
+        if (!ql || n.toLowerCase().includes(ql)) push({ id: r.user_id }, r.role[0].toUpperCase() + r.role.slice(1));
+      });
+      knownNames().forEach(p => { if (!ql || p.name.toLowerCase().includes(ql)) push(p, "Not linked yet"); });
+      if (q && !opts.some(o => personName(o.p).toLowerCase() === ql)) opts.push({ p: { name: q }, sub: isEmail(q) ? "Add by email" : "Add by name", add: true });
+      items = opts.slice(0, 10); active = items.length ? 0 : -1;
+      menu.replaceChildren(...items.map((o, i) => h("button", { type: "button", class: i === active ? "on" : "", onmousedown: e => e.preventDefault(), onclick: () => pick(i) },
+        avatar(o.p), h("span", { text: o.add ? "“" + q + "”" : personName(o.p) }), h("span", { class: "sub", text: o.sub }))));
+      menu.hidden = !items.length;
+    }
+    function pick(i) {
+      const o = items[i]; if (!o) return;
+      const p = cleanPerson(o.p);
+      if (p.name && isEmail(p.name)) p.name = p.name.toLowerCase();
+      onPick(p); inp.value = ""; menu.hidden = true; drawPeople(); setTimeout(() => { if (!inp.hidden) inp.focus(); }, 0);
+    }
+    inp.addEventListener("focus", refresh);
+    inp.addEventListener("input", refresh);
+    inp.addEventListener("blur", () => setTimeout(() => { menu.hidden = true; }, 120));
+    inp.addEventListener("keydown", e => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (!items.length) return; active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; [...menu.children].forEach((b, i) => b.classList.toggle("on", i === active)); }
+      else if (e.key === "Enter") { e.preventDefault(); if (active >= 0) pick(active); }
+      else if (e.key === "Escape" && !menu.hidden) { e.stopPropagation(); menu.hidden = true; }
+    });
+  }
+  setupPicker("fOwnerIn", "ownerMenu", p => { draft.owner = p; draft.shared = draft.shared.filter(s => personKey(s) !== personKey(p)); }, () => draft ? [personKey(draft.owner)] : []);
+  setupPicker("fShareIn", "shareMenu", p => { if (!draft.shared.some(s => personKey(s) === personKey(p))) draft.shared.push(p); }, () => draft ? [personKey(draft.owner), ...draft.shared.map(personKey)] : []);
+
+  $("editor").addEventListener("submit", e => {
+    e.preventDefault();
+    if (!draft || !draft.editable) return;
+    const title = $("fTitle").value.trim(); if (!title) { $("fTitle").focus(); return; }
+    const done = $("fDone").checked;
+    const t = Object.assign({}, draft, { id: draft.id || newId(), title, category: $("fCat").value, due: $("fDue").value || null,
+      priority: $("fPrio").checked, notes: $("fNotes").value, done });
+    if (done && !draft.done) { t.doneAt = Date.now(); t.doneBy = S.meId; }
+    if (!done) { t.doneAt = null; t.doneBy = null; }
+    const isNew = draft.isNew;
+    delete t.isNew; delete t.editable;
+    const prev = !isNew && S.tasks.get(t.id);
+    closeEditor();
+    if (isNew || JSON.stringify(toRow(prev)) !== JSON.stringify(toRow(t))) saveTask(t, isNew);
+  });
+  $("cancelBtn").addEventListener("click", closeEditor);
+  $("scrim").addEventListener("mousedown", e => { if (e.target === $("scrim")) closeEditor(); });
+  $("delBtn").addEventListener("click", () => { $("delBtn").hidden = true; $("delConfirm").hidden = false; $("delNo").focus(); });
+  $("delNo").addEventListener("click", () => { $("delConfirm").hidden = true; $("delBtn").hidden = false; });
+  $("delYes").addEventListener("click", () => { const id = draft && draft.id; closeEditor(); if (id) removeTask(id); });
+
+  // ---------- settings ----------
+  let catDraft = null;
+  function slugify(label, taken) {
+    let base = label.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30) || "cat";
+    let k = base, i = 2; while (taken.has(k)) k = base + "-" + i++;
+    return k;
+  }
+  function openSettings() {
+    catDraft = S.cats.map(c => Object.assign({}, c, { removing: false, moveTo: null }));
+    $("sMyName").value = S.meName;
+    $("sName").value = (S.list && S.list.name) || "";
+    $("managerSettings").hidden = !isManager();
+    $("inviteForm").hidden = S.role !== "owner";
+    $("leaveList").hidden = S.role === "owner";
+    $("newCat").value = ""; $("setErr").textContent = ""; $("inviteText").hidden = true; $("copyStatus").textContent = "";
+    drawCatList(); drawPeopleList();
+    $("setScrim").hidden = false;
+    setTimeout(() => $("sMyName").focus(), 0);
+  }
+  function closeSettings() { $("setScrim").hidden = true; catDraft = null; }
+  function drawCatList() {
+    const list = $("catList"); list.replaceChildren();
+    const live = catDraft.filter(c => !c.removing);
+    catDraft.forEach((c, i) => {
+      const count = [...S.tasks.values()].filter(t => t.category === c.key).length;
+      if (c.removing) {
+        const targets = live.filter(x => x !== c);
+        if (!c.moveTo && targets[0]) c.moveTo = targets[0].key;
+        list.append(h("div", { class: "catrow" },
+          h("span", { class: "swbtn", style: "background:" + colorVar(c.color) + ";opacity:.35" }),
+          h("span", { style: "text-decoration:line-through;color:var(--muted)", text: c.label }),
+          h("span"), h("span"),
+          h("button", { type: "button", class: "btn sm", text: "Undo", onclick: () => { c.removing = false; drawCatList(); } }),
+          count ? h("div", { class: "catmove" }, "Move its " + count + " task" + (count === 1 ? "" : "s") + " to",
+            h("select", { "aria-label": "Move tasks to", onchange: e => { c.moveTo = e.target.value; } }, targets.map(x => h("option", { value: x.key, text: x.label, selected: x.key === c.moveTo })))) : null));
+        return;
+      }
+      list.append(h("div", { class: "catrow" },
+        h("button", { type: "button", class: "swbtn", style: "background:" + colorVar(c.color), title: "Change color", "aria-label": "Change color for " + c.label, onclick: () => { c.color = (c.color + 1) % NCOLORS; drawCatList(); } }),
+        h("input", { type: "text", maxlength: "40", value: c.label, "aria-label": "Category name", oninput: e => { c.label = e.target.value; } }),
+        h("button", { type: "button", class: "iconbtn", text: "↑", "aria-label": "Move up", disabled: i === 0, onclick: () => { [catDraft[i - 1], catDraft[i]] = [catDraft[i], catDraft[i - 1]]; drawCatList(); } }),
+        h("button", { type: "button", class: "iconbtn", text: "↓", "aria-label": "Move down", disabled: i === catDraft.length - 1, onclick: () => { [catDraft[i + 1], catDraft[i]] = [catDraft[i], catDraft[i + 1]]; drawCatList(); } }),
+        h("button", { type: "button", class: "btn sm danger", text: "Remove", disabled: live.length <= 1, title: live.length <= 1 ? "A list needs at least one category" : null, onclick: () => { c.removing = true; drawCatList(); } })));
+    });
+  }
+  function drawPeopleList() {
+    const box = $("peopleList"); box.replaceChildren();
+    const owner = S.role === "owner";
+    S.people.slice().sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : 0) || (a.display_name || "").localeCompare(b.display_name || "")).forEach(p => {
+      const me = p.user_id === S.meId;
+      const name = p.pending ? p.email : (p.display_name || p.email || "Someone") + (me ? " (you)" : "");
+      const roleEl = owner && p.role !== "owner"
+        ? h("select", { "aria-label": "Role for " + name, onchange: e => changeRole(p, e.target.value) },
+            ["contributor", "editor"].map(r => h("option", { value: r, text: r[0].toUpperCase() + r.slice(1), selected: r === p.role })))
+        : h("span", { class: "muted", text: p.role[0].toUpperCase() + p.role.slice(1) });
+      box.append(h("div", { class: "personrow" },
+        avatar(p.user_id ? { id: p.user_id } : { name: p.email }),
+        h("span", null, h("span", { text: name }), p.pending ? h("span", { class: "muted", text: " · invited, hasn't signed in" }) : (p.email && !me ? h("span", { class: "muted", text: " · " + p.email }) : null)),
+        roleEl,
+        owner && p.role !== "owner" ? h("button", { type: "button", class: "btn sm danger", text: "Remove", onclick: () => removePerson(p) }) : h("span")));
+    });
+  }
+  async function changeRole(p, role) {
+    const res = p.pending
+      ? await S.sb.from("invites").update({ role }).eq("list_id", S.listId).eq("email", p.email)
+      : await S.sb.from("list_members").update({ role }).eq("list_id", S.listId).eq("user_id", p.user_id);
+    if (res.error) { $("setErr").textContent = res.error.message; return; }
+    p.role = role;
+  }
+  async function removePerson(p) {
+    const res = p.pending
+      ? await S.sb.from("invites").delete().eq("list_id", S.listId).eq("email", p.email)
+      : await S.sb.from("list_members").delete().eq("list_id", S.listId).eq("user_id", p.user_id);
+    if (res.error) { $("setErr").textContent = res.error.message; return; }
+    S.people = S.people.filter(x => x !== p); drawPeopleList();
+  }
+  $("invGo").addEventListener("click", async () => {
+    const email = $("invEmail").value.trim().toLowerCase();
+    $("setErr").textContent = "";
+    if (!isEmail(email)) { $("setErr").textContent = "That email address doesn't look complete."; $("invEmail").focus(); return; }
+    $("invGo").disabled = true;
+    const { data, error } = await S.sb.rpc("invite_member", { p_list: S.listId, p_email: email, p_role: $("invRole").value });
+    $("invGo").disabled = false;
+    if (error) { $("setErr").textContent = error.message; return; }
+    $("invEmail").value = "";
+    const r = await S.sb.rpc("list_people", { p_list: S.listId });
+    if (!r.error) S.people = r.data || [];
+    drawPeopleList();
+    $("copyStatus").textContent = data === "added" ? email + " already had an account and is on the list now." : email + " is invited. Send them the invite message.";
+  });
+  $("copyInvite").addEventListener("click", async () => {
+    const text = S.meName + " shared the list “" + ((S.list && S.list.name) || "Kay2-Do") + "” with you on Kay2-Do.\n\n" +
+      "Open it here: " + appLink() + "\n" +
+      "Sign in with this email address; you'll get a 6-digit code. Then use Owner → Mine to see what's yours and check things off as you finish them. " +
+      "The Kay2-Do Mac and iPhone app works with the same sign-in.";
+    const ta = $("inviteText"); ta.value = text;
+    try { await navigator.clipboard.writeText(text); $("copyStatus").textContent = "Copied. Paste it into an email or text."; ta.hidden = true; }
+    catch (e) { ta.hidden = false; ta.focus(); ta.select(); $("copyStatus").textContent = "Copy the message below."; }
+  });
+  $("leaveList").addEventListener("click", async () => {
+    if (!confirm("Leave this list? You'll need a new invite to get back in.")) return;
+    const { error } = await S.sb.from("list_members").delete().eq("list_id", S.listId).eq("user_id", S.meId);
+    if (error) { $("setErr").textContent = error.message; return; }
+    closeSettings(); LS.set("list", null); loadLists();
+  });
+  $("addCat").addEventListener("click", () => {
+    const v = $("newCat").value.trim(); if (!v) { $("newCat").focus(); return; }
+    if (catDraft.filter(c => !c.removing).length >= 12) { $("setErr").textContent = "A list can have up to 12 categories."; return; }
+    const used = new Set(catDraft.map(c => c.color));
+    let color = 0; while (used.has(color) && color < NCOLORS - 1) color++;
+    catDraft.push({ id: null, key: slugify(v, new Set(catDraft.map(c => c.key))), label: v.slice(0, 40), color, removing: false, moveTo: null });
+    $("newCat").value = ""; $("setErr").textContent = ""; drawCatList(); $("newCat").focus();
+  });
+  $("newCat").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("addCat").click(); } });
+  $("setPanel").addEventListener("submit", async e => {
+    e.preventDefault();
+    $("setErr").textContent = "";
+    const myName = $("sMyName").value.trim().slice(0, 80);
+    if (myName && myName !== S.meName) {
+      const { error } = await S.sb.from("profiles").update({ display_name: myName }).eq("id", S.meId);
+      if (error) { $("setErr").textContent = error.message; return; }
+      S.meName = myName; $("whoami").textContent = myName;
+    }
+    if (isManager()) {
+      const keep = catDraft.filter(c => !c.removing);
+      if (keep.some(c => !c.label.trim())) { $("setErr").textContent = "Every category needs a name."; return; }
+      const name = $("sName").value.trim().slice(0, 60) || "Kay2-Do";
+      const ops = [];
+      if (name !== S.list.name) ops.push(S.sb.from("lists").update({ name }).eq("id", S.listId));
+      keep.forEach((c, i) => {
+        const row = { list_id: S.listId, key: c.key, label: c.label.trim().slice(0, 40), color: c.color, sort_order: i };
+        const old = S.cats.find(x => x.id && x.id === c.id);
+        if (!c.id) ops.push(S.sb.from("categories").insert(row));
+        else if (!old || old.label !== row.label || old.color !== row.color || old.sort !== i) ops.push(S.sb.from("categories").update(row).eq("id", c.id));
+      });
+      for (const c of catDraft.filter(c => c.removing)) {
+        if (c.moveTo) ops.push(S.sb.from("tasks").update({ category_key: c.moveTo }).eq("list_id", S.listId).eq("category_key", c.key));
+      }
+      const results = await Promise.all(ops);
+      const bad = results.find(r => r.error);
+      if (bad) { $("setErr").textContent = bad.error.message; return; }
+      const dels = await Promise.all(catDraft.filter(c => c.removing && c.id).map(c => S.sb.from("categories").delete().eq("id", c.id)));
+      const badDel = dels.find(r => r.error);
+      if (badDel) { $("setErr").textContent = badDel.error.message; return; }
+      if (catDraft.some(c => c.removing && c.key === S.view)) setView("all");
+      if (name !== S.list.name) { S.list.name = name; const l = S.lists.find(x => x.id === S.listId); if (l) l.name = name; drawListPick(); }
+    }
+    closeSettings();
+    reloadList();
+  });
+  $("setCancel").addEventListener("click", closeSettings);
+  $("setScrim").addEventListener("mousedown", e => { if (e.target === $("setScrim")) closeSettings(); });
+  $("settingsBtn").addEventListener("click", openSettings);
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (!$("scrim").hidden) closeEditor(); else if (!$("setScrim").hidden) closeSettings();
+  });
+
+  // ---------- toolbar ----------
+  $("ownerFilter").addEventListener("change", e => { S.ownerFilter = e.target.value; render(); });
+  $("q").addEventListener("input", e => { S.q = e.target.value.trim(); render(); });
+  $("showDone").checked = S.showDone;
+  $("showDone").addEventListener("change", e => { S.showDone = e.target.checked; LS.set("showDone", S.showDone ? "1" : "0"); render(); });
+  $("printBtn").addEventListener("click", () => window.print());
+  ["weekOf", "themeText", "themeWhy"].forEach(id => $(id).addEventListener("change", saveWeek));
+  ["themeText", "themeWhy"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); }));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && S.listId) scheduleReload(0); });
+
+  // ---------- boot ----------
+  function start() {
+    const cfg = config();
+    if (!cfg) { show("connectGate"); return; }
+    if (!window.supabase || !window.supabase.createClient) { show("connectGate"); $("cErr").textContent = "Couldn't load the Supabase library. Check your connection and reload."; return; }
+    S.sb = window.supabase.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    let signedIn;   // undefined until the first event, so a signed-out start still shows the sign-in screen
+    S.sb.auth.onAuthStateChange((event, session) => {
+      const id = session && session.user ? session.user.id : null;
+      if (id === signedIn) return;
+      signedIn = id;
+      if (id) { setTimeout(afterSignIn, 0); }
+      else {
+        if (channel) { S.sb.removeChannel(channel); channel = null; }
+        S.meId = null; S.listId = null; S.role = null; S.tasks = new Map();
+        resetSignin(); show("signinGate");
+      }
+    });
+  }
+  readHash();
+  start();
+})();
+</script>
+</body>
+</html>

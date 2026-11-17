@@ -1,9 +1,10 @@
-name: Build
+name: Mac and iPhone app
 
 on:
   push:
-    branches: [main]
+    paths: ["apple/**", ".github/workflows/build.yml"]
   pull_request:
+    paths: ["apple/**", ".github/workflows/build.yml"]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild build \
-            -project Kay2Do.xcodeproj \
+            -project apple/Kay2Do.xcodeproj \
             -scheme Kay2Do \
             -configuration Debug \
             -destination "${{ matrix.destination }}" \
