@@ -94,6 +94,23 @@ final class Store: ObservableObject {
         await afterSignIn()
     }
 
+    /// Handles the emailed sign-in link when it opens the app.
+    func open(_ url: URL) {
+        guard let backend else { return }
+        Task {
+            do {
+                if try await backend.completeSignIn(from: url) {
+                    notice = nil
+                    phase = .loading
+                    await afterSignIn()
+                }
+            } catch {
+                notice = error.localizedDescription
+                if backend.session == nil { phase = .signedOut }
+            }
+        }
+    }
+
     func signOut() async {
         stopPolling()
         await backend?.signOut()
@@ -431,7 +448,7 @@ final class Store: ObservableObject {
 
     func inviteMessage() -> String {
         "\(myName) shared the list “\(listName)” with you on Kay2-Do.\n\n"
-            + "Open the Kay2-Do app or the web list and sign in with this email address; you'll get a 6-digit code. "
+            + "Open the Kay2-Do app or the web list and sign in with this email address; you'll get a sign-in link by email. "
             + "Then use Owner → Mine to see what's yours and check things off as you finish them."
     }
 

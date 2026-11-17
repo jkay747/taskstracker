@@ -192,12 +192,12 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
 <!-- Sign in with an emailed code -->
 <form class="gate wrap" id="signinGate" hidden>
   <h1>Kay2-Do</h1>
-  <p id="siLead">Sign in with your email. We'll send you a 6-digit code.</p>
+  <p id="siLead">Sign in with your email. We'll send you a sign-in link.</p>
   <div class="field" id="siEmailField"><label class="label" for="siEmail">Email</label><input id="siEmail" type="email" autocomplete="email" required></div>
-  <div class="field" id="siCodeField" hidden><label class="label" for="siCode">Code from the email</label><input id="siCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+  <div class="field" id="siCodeField" hidden><label class="label" for="siCode">Or enter the 6-digit code, if the email has one</label><input id="siCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
   <div class="errline" id="siErr"></div>
-  <div class="inline"><button class="btn primary" type="submit" id="siGo">Send code</button><button class="linkbtn" type="button" id="siBack" hidden>Use a different email</button></div>
-  <div class="hint" id="siHint" hidden>The email can also have a sign-in link; opening it on this device works too.</div>
+  <div class="inline"><button class="btn primary" type="submit" id="siGo">Send sign-in link</button><button class="linkbtn" type="button" id="siBack" hidden>Use a different email</button></div>
+  <div class="hint" id="siHint" hidden>Open the link in this browser on this device. You can close this tab; the link opens the list signed in.</div>
 </form>
 
 <!-- No list yet -->
@@ -445,7 +445,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   let pendingEmail = "";
   function resetSignin() {
     pendingEmail = ""; $("siEmailField").hidden = false; $("siCodeField").hidden = true; $("siBack").hidden = true; $("siHint").hidden = true;
-    $("siGo").textContent = "Send code"; $("siLead").textContent = "Sign in with your email. We'll send you a 6-digit code."; $("siErr").textContent = "";
+    $("siGo").textContent = "Send sign-in link"; $("siLead").textContent = "Sign in with your email. We'll send you a sign-in link."; $("siErr").textContent = "";
   }
   $("siBack").addEventListener("click", resetSignin);
   $("signinGate").addEventListener("submit", async e => {
@@ -459,8 +459,8 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
         if (error) throw error;
         pendingEmail = email;
         $("siEmailField").hidden = true; $("siCodeField").hidden = false; $("siBack").hidden = false; $("siHint").hidden = false;
-        $("siLead").textContent = "We sent a code to " + email + ". Enter it below.";
-        $("siGo").textContent = "Sign in"; setTimeout(() => $("siCode").focus(), 0);
+        $("siLead").textContent = "We emailed a sign-in link to " + email + ". Open it to sign in.";
+        $("siGo").textContent = "Sign in with code";
       } else {
         const token = $("siCode").value.replace(/\s/g, "");
         if (!token) { $("siCode").focus(); return; }
@@ -954,7 +954,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   $("copyInvite").addEventListener("click", async () => {
     const text = S.meName + " shared the list “" + ((S.list && S.list.name) || "Kay2-Do") + "” with you on Kay2-Do.\n\n" +
       "Open it here: " + appLink() + "\n" +
-      "Sign in with this email address; you'll get a 6-digit code. Then use Owner → Mine to see what's yours and check things off as you finish them. " +
+      "Sign in with this email address; you'll get a sign-in link by email. Then use Owner → Mine to see what's yours and check things off as you finish them. " +
       "The Kay2-Do Mac and iPhone app works with the same sign-in.";
     const ta = $("inviteText"); ta.value = text;
     try { await navigator.clipboard.writeText(text); $("copyStatus").textContent = "Copied. Paste it into an email or text."; ta.hidden = true; }

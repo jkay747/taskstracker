@@ -40,8 +40,50 @@ final class Backend {
 
     // MARK: Auth
 
+    /// Where the emailed sign-in link sends you back to: this app, via its URL scheme.
+    static let redirectURL = "kay2do://login"
+
+    /// Emails a sign-in link (and a 6-digit code, if the project's email template includes one).
     func sendCode(to email: String) async throws {
-        try await request("POST", "auth/v1/otp", body: ["email": email, "create_user": true], authorized: false)
+        try await request("POST", "auth/v1/otp", query: [URLQueryItem(name: "redirect_to", value: Self.redirectURL)],
+                          body: ["email": email, "create_user": true], authorized: false)
+    }
+
+    /// Finishes sign-in from the emailed link: kay2do://login#access_token=…&refresh_token=…
+    /// Returns false if the URL isn't a sign-in link.
+    func completeSignIn(from url: URL) async throws -> Bool {
+        guard url.scheme == "kay2do" else { return false }
+        var params: [String: String] = [:]
+        for part in [url.fragment, URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery] {
+            for pair in (part ?? "").split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding ?? String($0) }
+                if kv.count == 2 { params[kv[0]] = kv[1].replacingOccurrences(of: "+", with: " ") }
+            }
+        }
+        if let problem = params["error_description"] ?? params["error"] {
+            throw BackendError(message: problem.contains("expired") || problem.contains("invalid")
+                               ? "That sign-in link has expired or was already used. Ask for a new one."
+                               : problem)
+        }
+        guard let access = params["access_token"], let refresh = params["refresh_token"] else { return false }
+        // Look up who the link signed in.
+        guard let userURL = URL(string: baseURL + "/auth/v1/user") else { return false }
+        var req = URLRequest(url: userURL)
+        req.setValue(anonKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer " + access, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await http.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw BackendError(message: "That sign-in link didn't work. Ask for a new one.")
+        }
+        struct User: Decodable { let id: String; let email: String? }
+        let user = try JSONDecoder().decode(User.self, from: data)
+        let lifetime = Double(params["expires_in"] ?? "") ?? 3600
+        let expiry = Double(params["expires_at"] ?? "").map { Date(timeIntervalSince1970: $0) } ?? Date().addingTimeInterval(lifetime)
+        let next = AuthSession(accessToken: access, refreshToken: refresh, expiresAt: expiry,
+                               userID: user.id.lowercased(), email: (user.email ?? "").lowercased())
+        session = next
+        SessionStore.save(next)
+        return true
     }
 
     func verify(email: String, code: String) async throws {
@@ -123,8 +165,13 @@ final class Backend {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
-        let token = authorized ? try await accessToken() : anonKey
-        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        // New-style publishable keys (sb_publishable_…) aren't JWTs and must not
+        // be sent as a Bearer token; older anon keys (eyJ…) can be.
+        if authorized {
+            request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
+        } else if anonKey.hasPrefix("eyJ") {
+            request.setValue("Bearer " + anonKey, forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let prefer { request.setValue(prefer, forHTTPHeaderField: "Prefer") }

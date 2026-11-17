@@ -85,8 +85,8 @@ struct SignInView: View {
     @State private var error: String?
 
     var body: some View {
-        GateFrame(lead: sentTo.map { "We sent a 6-digit code to \($0). Enter it below." }
-                  ?? "Sign in with your email. We'll send you a 6-digit code. Use the same email as on the web list.") {
+        GateFrame(lead: sentTo.map { "We emailed a sign-in link to \($0). Open it on this device (on iPhone, tap it in Mail) and Kay2-Do opens signed in." }
+                  ?? "Sign in with your email. We'll send you a sign-in link. Use the same email as on the web list.") {
             if let notice = store.notice {
                 Text(notice).font(.callout)
             }
@@ -100,11 +100,14 @@ struct SignInView: View {
                     .keyboardType(.emailAddress)
                     #endif
                     .onSubmit(send)
-                Button("Send code", action: send)
+                Button("Send sign-in link", action: send)
                     .buttonStyle(.borderedProminent)
                     .disabled(busy || !email.contains("@"))
             } else {
-                TextField("Code from the email", text: $code)
+                Text("If the email has a 6-digit code instead, enter it here:")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                TextField("6-digit code", text: $code)
                     .textFieldStyle(.roundedBorder)
                     #if os(iOS)
                     .textContentType(.oneTimeCode)
@@ -115,6 +118,9 @@ struct SignInView: View {
                     Button("Sign in", action: verify)
                         .buttonStyle(.borderedProminent)
                         .disabled(busy || code.filter(\.isNumber).count < 6)
+                    Button("Send again", action: resend)
+                        .buttonStyle(.borderless)
+                        .disabled(busy)
                     Button("Use a different email") {
                         sentTo = nil; code = ""; error = nil
                     }
@@ -150,6 +156,13 @@ struct SignInView: View {
                 self.error = error.localizedDescription
             }
         }
+    }
+
+    private func resend() {
+        guard let address = sentTo else { return }
+        email = address
+        sentTo = nil
+        send()
     }
 
     private func verify() {

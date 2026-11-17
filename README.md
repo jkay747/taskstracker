@@ -8,7 +8,7 @@ One task tracker, three ways in, one shared list:
 | **Mac + iPhone** | `apple/` | A native SwiftUI app (one codebase for both) |
 | **Data** | `supabase/` | The shared database both of them use |
 
-A task you add on your iPhone shows up on the web page within seconds, and the other way round. Everyone signs in with their email (a 6-digit code, no password), and you share a list by inviting someone's email address.
+A task you add on your iPhone shows up on the web page within seconds, and the other way round. Everyone signs in with their email (an emailed sign-in link, no password), and you share a list by inviting someone's email address.
 
 Features, everywhere:
 
@@ -19,41 +19,29 @@ Features, everywhere:
 - Several lists per account, each shared with its own people
 - Roles: **owner** (everything, including who's on the list), **editor** (anything but people), **contributor** (adds tasks; checks off and edits the ones they own, are on, or created)
 
-## Set up (once, about 15 minutes)
+## Set up
 
-### 1. Make the Supabase project
+This repo is already connected to its Supabase project (`twdhmugbmvqpahjaambj`): the URL and publishable key are in `web/config.js` and `apple/Kay2Do/SupabaseConfig.swift`. To point it at a different project, change those two files.
 
-1. Create a free account at [supabase.com](https://supabase.com) and a **New project**. Note the database password somewhere safe; the apps don't need it.
-2. Open **SQL Editor → New query**, paste all of [`supabase/schema.sql`](supabase/schema.sql), and press **Run**. It's safe to run again later.
-3. Open **Authentication → Emails** (Email Templates). In both **Confirm signup** and **Magic Link**, add the code to the message, for example:
+### 1. Supabase (done for this project)
 
-   ```html
-   <h2>Your Kay2-Do code</h2>
-   <p>Enter this code to sign in: <strong>{{ .Token }}</strong></p>
-   <p>Or follow this link on this device: <a href="{{ .ConfirmationURL }}">sign in</a></p>
-   ```
+1. **SQL Editor → New query**: run all of [`supabase/schema.sql`](supabase/schema.sql). It's safe to run again after changes.
+2. **Authentication → URL Configuration**: Site URL `https://jkay747.github.io/taskstracker/`; redirect URLs `kay2do://login`, `https://jkay747.github.io/taskstracker/**` and `http://localhost:8000/**`.
 
-   The Mac and iPhone app needs the code. The web page accepts either the code or the link.
-4. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
+Sign-in works with Supabase's built-in email sender, which sends a **link** and allows only a few emails an hour. Tapping the link on an iPhone or Mac with the app installed opens the app signed in; in a browser it opens the web list signed in. Open the link on the same device you're signing in on.
 
-Supabase's built-in email sender is limited to a few emails an hour, which is fine for a few people. For more, add your own SMTP sender under **Authentication → SMTP Settings**.
+Optional: for more emails, or to also get a 6-digit code (handy when the email is on a different device), add your own sender under **Authentication → Emails → SMTP Settings**, then add `{{ .Token }}` to the **Magic link** and **Confirm sign up** templates. Both apps already accept the code.
 
-### 2. Point both apps at it
+### 2. The keys
 
-Put the two values in both places (the anon key is meant to be public; row-level security in the schema is what keeps lists private):
-
-- `web/config.js` → `supabaseUrl` and `supabaseAnonKey`
-- `apple/Kay2Do/SupabaseConfig.swift` → `url` and `anonKey`
-
-If you leave them blank, each app asks for them the first time it opens and remembers them on that device.
+The publishable key is meant to be public: row-level security in the schema is what keeps each list private. Never put the `service_role` / secret key in either app.
 
 ### 3. Publish the web page
 
 1. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Push to `main`. The **Web app** workflow publishes `web/` to `https://<your-user>.github.io/taskstracker/`.
-3. Back in Supabase, **Authentication → URL Configuration**: set **Site URL** to that address so sign-in links come back to the page.
+2. Push to `main`. The **Web app** workflow publishes `web/` to <https://jkay747.github.io/taskstracker/>.
 
-To try it locally instead, run `python3 -m http.server -d web 8000` and open <http://localhost:8000> (add that URL to Supabase's redirect URLs too).
+To try it locally instead, run `python3 -m http.server -d web 8000` and open <http://localhost:8000> (already in Supabase's redirect URLs).
 
 ### 4. Build the Mac and iPhone app
 
@@ -71,7 +59,7 @@ Sign in once (web or app) with your email. You'll land on "Create my list". To b
 
 1. **List settings → People**: type their email, pick **Contributor** or **Editor**, and press **Invite**.
 2. Use **Copy invite message** (web) or **Send Invite Message** (app) and send it to them. Supabase doesn't send an email by itself at this point.
-3. They open the web page or the app and sign in with that email. The list is there, and any task you assigned to their email address is now linked to them.
+3. They open the web page or the app, sign in with that email, and tap the link in the email. The list is there, and any task you assigned to their email address is now linked to them.
 
 You can assign a task to a typed name or email before someone has joined. It shows as "not linked" until they do.
 
@@ -82,7 +70,7 @@ You can assign a task to a typed name or email before someone has joined. It sho
 | `supabase/schema.sql` | Tables, row-level security, and the functions both apps call (`create_list`, `invite_member`, `accept_invites`, `list_people`) |
 | `web/index.html` | The whole web app (HTML, CSS, JS); uses supabase-js from a CDN and live updates |
 | `web/config.js` | Supabase URL and anon key for the web app |
-| `apple/Kay2Do/Backend.swift` | Small Supabase client: email-code sign-in, token refresh, REST calls |
+| `apple/Kay2Do/Backend.swift` | Small Supabase client: email-link (or code) sign-in, token refresh, REST calls |
 | `apple/Kay2Do/Store.swift` | The app's data: loading, refreshing every 12 seconds, saving changes in order |
 | `apple/Kay2Do/Model.swift` | Task, category, list and person records, matching the database |
 | `apple/Kay2Do/SignInView.swift` | Connect, sign-in and "no list yet" screens |
