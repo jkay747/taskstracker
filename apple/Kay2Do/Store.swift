@@ -314,6 +314,35 @@ final class Store: ObservableObject {
         }
     }
 
+    // MARK: Weekly quote
+
+    /// What to show this week, or nil when the list has quotes turned off.
+    var weeklyQuote: Quote? {
+        guard let list, list.showQuote else { return nil }
+        if !list.quote.isEmpty { return Quote(text: list.quote, by: list.quoteBy) }
+        return Quote.weekly()
+    }
+
+    /// Saves a typed or picked quote; a blank quote goes back to the weekly pick.
+    func setQuote(_ text: String, by: String) {
+        guard isManager, var current = list else { return }
+        let quote = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(400))
+        let author = quote.isEmpty ? "" : String(by.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+        current.quote = quote
+        current.quoteBy = author
+        list = current
+        let id = current.id
+        write("save the quote") { try await $0.update("lists", fields: ["quote": quote, "quote_by": author], where: [("id", "eq." + id)]) }
+    }
+
+    func setShowQuote(_ show: Bool) {
+        guard isManager, var current = list, current.showQuote != show else { return }
+        current.showQuote = show
+        list = current
+        let id = current.id
+        write("save the quote setting") { try await $0.update("lists", fields: ["show_quote": show], where: [("id", "eq." + id)]) }
+    }
+
     // MARK: Tasks
 
     func permissions(for task: TaskItem) -> (edit: Bool, delete: Bool) {

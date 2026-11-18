@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @State private var myName = ""
     @State private var listName = ""
+    @State private var showQuote = true
     @State private var drafts: [Store.CategoryDraft] = []
     @State private var newCategory = ""
     @State private var removing: Store.CategoryDraft?
@@ -27,6 +28,7 @@ struct SettingsView: View {
                 if store.isManager {
                     Section("List name") {
                         TextField("List name", text: $listName)
+                        Toggle("Show a weekly quote", isOn: $showQuote)
                     }
                     categoriesSection
                 }
@@ -66,7 +68,10 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         store.setMyName(myName)
-                        if store.isManager { store.applySettings(listName: listName, drafts: drafts) }
+                        if store.isManager {
+                            store.applySettings(listName: listName, drafts: drafts)
+                            store.setShowQuote(showQuote)
+                        }
                         dismiss()
                     }
                     .disabled(live.contains { $0.label.trimmingCharacters(in: .whitespaces).isEmpty })
@@ -90,6 +95,7 @@ struct SettingsView: View {
             loaded = true
             myName = store.myName
             listName = store.listName
+            showQuote = store.list?.showQuote ?? true
             drafts = store.categoryDrafts()
         }
         #if os(macOS)

@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="quotes.js"></script>
 <style>
 /* A planner sheet: ruled lines, boxed category headers, square checkboxes; one column per category, or one wide sheet when a category is picked. */
 :root {
@@ -49,6 +50,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .theme { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 10px 14px; align-items: baseline; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
 .theme em { font-family: var(--font-display); font-style: italic; color: var(--muted); white-space: nowrap; }
 .theme input { width: 100%; border: 0; border-bottom: 1px dotted var(--muted); background: transparent; padding: 3px 0; }
+
+.quote { margin: 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--k3); display: grid; gap: 4px; max-width: 920px; }
+.quote blockquote { margin: 0; font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 2vw, 21px); line-height: 1.35; text-wrap: pretty; }
+.quote figcaption { font-size: 13px; color: var(--muted); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
 
 .banner { border: 1px solid var(--rule); background: var(--sheet); border-left: 4px solid var(--accent); padding: 10px 14px; font-size: 14px; display: grid; gap: 8px; }
 .banner p { margin: 0; max-width: 75ch; }
@@ -226,6 +231,11 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     <em>because…</em><input id="themeWhy" type="text" maxlength="140" aria-label="Because">
   </div>
 
+  <figure class="quote" id="quoteBox" hidden>
+    <blockquote id="quoteText"></blockquote>
+    <figcaption><span id="quoteBy"></span><button type="button" class="linkbtn" id="quoteEdit" hidden>Change quote</button></figcaption>
+  </figure>
+
   <div class="banner" id="banner" hidden></div>
 
   <section class="summary">
@@ -282,6 +292,19 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   </form>
 </div>
 
+<!-- Weekly quote -->
+<div class="scrim" id="qScrim" hidden>
+  <form class="panel" id="qPanel" role="dialog" aria-modal="true" aria-labelledby="qTitle">
+    <h2 id="qTitle">This week's quote</h2>
+    <div class="field"><label class="label" for="qText">Quote</label><textarea id="qText" maxlength="400" placeholder="Leave blank to use this week's pick"></textarea></div>
+    <div class="field"><label class="label" for="qBy">Who said it</label><input id="qBy" type="text" maxlength="120"></div>
+    <div class="inline"><button type="button" class="btn sm" id="qAnother">Another pick</button><button type="button" class="btn sm" id="qAuto">Use this week's pick</button></div>
+    <div class="hint">The built-in picks change every Monday and are the same for everyone on the list. A quote you type stays until you change it or press <strong>Use this week's pick</strong>.</div>
+    <div class="errline" id="qErr"></div>
+    <div class="actions"><span></span><div class="r"><button type="button" class="btn" id="qCancel">Cancel</button><button type="submit" class="btn primary">Save</button></div></div>
+  </form>
+</div>
+
 <!-- List settings -->
 <div class="scrim" id="setScrim" hidden>
   <form class="panel" id="setPanel" role="dialog" aria-modal="true" aria-labelledby="setTitle">
@@ -289,6 +312,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     <div class="field"><label class="label" for="sMyName">Your name</label><input id="sMyName" type="text" maxlength="80"><div class="hint">How you appear to everyone on your lists.</div></div>
     <div id="managerSettings">
       <div class="field"><label class="label" for="sName">List name</label><input id="sName" type="text" maxlength="60"></div>
+      <label class="chk2"><input id="sShowQuote" type="checkbox"> Show a weekly quote</label>
       <div class="field" style="margin-top:14px">
         <span class="label">Categories</span>
         <div class="catlist" id="catList"></div>
@@ -596,6 +620,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     if (document.activeElement !== $("weekOf")) $("weekOf").value = l.week_of || "";
     if (document.activeElement !== $("themeText")) $("themeText").value = l.theme || "";
     if (document.activeElement !== $("themeWhy")) $("themeWhy").value = l.because || "";
+    drawQuote();
   }
   async function saveWeek() {
     if (!S.list || !isManager()) return;
@@ -605,6 +630,61 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     const { error } = await S.sb.from("lists").update(w).eq("id", S.listId);
     if (error) failed(error, "save the weekly theme");
   }
+
+  // ---------- weekly quote ----------
+  const QUOTES = Array.isArray(window.KAY2DO_QUOTES) ? window.KAY2DO_QUOTES : [];
+  // Weeks since Monday 5 Jan 2026, by the local calendar; the apps use the same count.
+  function weekNumber(d) {
+    const day = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.floor((day - Date.UTC(2026, 0, 5)) / 86400000 / 7);
+  }
+  function weeklyPick(offset) {
+    if (!QUOTES.length) return null;
+    const n = QUOTES.length;
+    return QUOTES[(((weekNumber(new Date()) + (offset || 0)) % n) + n) % n];
+  }
+  const attribution = q => q.by + (q.source ? ", " + q.source : "");
+  function currentQuote() {
+    const l = S.list || {};
+    if (l.show_quote === false) return null;
+    if (l.quote) return { text: l.quote, by: l.quote_by || "", source: "" };
+    return weeklyPick(0);
+  }
+  function drawQuote() {
+    const q = currentQuote();
+    $("quoteBox").hidden = !q;
+    if (!q) return;
+    $("quoteText").textContent = q.text;
+    $("quoteBy").textContent = attribution(q) ? "— " + attribution(q) : "";
+    $("quoteEdit").hidden = !isManager();
+  }
+  let pickOffset = 1;
+  function openQuote() {
+    const l = S.list || {};
+    $("qText").value = l.quote || ""; $("qBy").value = l.quote_by || ""; $("qErr").textContent = "";
+    if (!l.quote) { const q = weeklyPick(0); if (q) $("qText").placeholder = "This week: " + q.text; }
+    pickOffset = 1;
+    $("qScrim").hidden = false;
+    setTimeout(() => $("qText").focus(), 0);
+  }
+  function closeQuote() { $("qScrim").hidden = true; }
+  async function saveQuote(text, by) {
+    const fields = { quote: text.trim().slice(0, 400), quote_by: text.trim() ? by.trim().slice(0, 120) : "" };
+    Object.assign(S.list, fields); drawQuote();
+    const { error } = await S.sb.from("lists").update(fields).eq("id", S.listId);
+    if (error) failed(error, "save the quote");
+  }
+  $("quoteEdit").addEventListener("click", openQuote);
+  $("qAnother").addEventListener("click", () => {
+    const current = $("qText").value.trim() || (weeklyPick(0) || {}).text;
+    let q = weeklyPick(pickOffset++);
+    if (q && q.text === current) q = weeklyPick(pickOffset++);
+    if (q) { $("qText").value = q.text; $("qBy").value = attribution(q); }
+  });
+  $("qAuto").addEventListener("click", () => { closeQuote(); saveQuote("", ""); });
+  $("qPanel").addEventListener("submit", e => { e.preventDefault(); closeQuote(); saveQuote($("qText").value, $("qBy").value); });
+  $("qCancel").addEventListener("click", closeQuote);
+  $("qScrim").addEventListener("mousedown", e => { if (e.target === $("qScrim")) closeQuote(); });
 
   // ---------- filters ----------
   function matches(t) {
@@ -872,6 +952,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     catDraft = S.cats.map(c => Object.assign({}, c, { removing: false, moveTo: null }));
     $("sMyName").value = S.meName;
     $("sName").value = (S.list && S.list.name) || "";
+    $("sShowQuote").checked = !S.list || S.list.show_quote !== false;
     $("managerSettings").hidden = !isManager();
     $("inviteForm").hidden = S.role !== "owner";
     $("leaveList").hidden = S.role === "owner";
@@ -989,7 +1070,11 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       if (keep.some(c => !c.label.trim())) { $("setErr").textContent = "Every category needs a name."; return; }
       const name = $("sName").value.trim().slice(0, 60) || "Kay2-Do";
       const ops = [];
-      if (name !== S.list.name) ops.push(S.sb.from("lists").update({ name }).eq("id", S.listId));
+      const showQuote = $("sShowQuote").checked;
+      if (name !== S.list.name || showQuote !== (S.list.show_quote !== false)) {
+        ops.push(S.sb.from("lists").update({ name, show_quote: showQuote }).eq("id", S.listId));
+        S.list.show_quote = showQuote;
+      }
       keep.forEach((c, i) => {
         const row = { list_id: S.listId, key: c.key, label: c.label.trim().slice(0, 40), color: c.color, sort_order: i };
         const old = S.cats.find(x => x.id && x.id === c.id);
@@ -1016,7 +1101,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   $("settingsBtn").addEventListener("click", openSettings);
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
-    if (!$("scrim").hidden) closeEditor(); else if (!$("setScrim").hidden) closeSettings();
+    if (!$("scrim").hidden) closeEditor(); else if (!$("setScrim").hidden) closeSettings(); else if (!$("qScrim").hidden) closeQuote();
   });
 
   // ---------- toolbar ----------

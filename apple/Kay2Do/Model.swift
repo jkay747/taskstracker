@@ -52,10 +52,16 @@ struct TaskList: Codable, Identifiable, Equatable {
     var weekOf: String?
     var theme: String
     var because: String
+    /// Blank = use the built-in pick for the week.
+    var quote: String
+    var quoteBy: String
+    var showQuote: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, name, theme, because
+        case id, name, theme, because, quote
         case weekOf = "week_of"
+        case quoteBy = "quote_by"
+        case showQuote = "show_quote"
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +71,35 @@ struct TaskList: Codable, Identifiable, Equatable {
         weekOf = try c.decodeIfPresent(String.self, forKey: .weekOf)
         theme = try c.decodeIfPresent(String.self, forKey: .theme) ?? ""
         because = try c.decodeIfPresent(String.self, forKey: .because) ?? ""
+        quote = try c.decodeIfPresent(String.self, forKey: .quote) ?? ""
+        quoteBy = try c.decodeIfPresent(String.self, forKey: .quoteBy) ?? ""
+        showQuote = try c.decodeIfPresent(Bool.self, forKey: .showQuote) ?? true
+    }
+}
+
+/// A quote for the week: one of the built-in ones (Quotes.swift) or one typed in.
+struct Quote: Equatable {
+    let text: String
+    let by: String
+    var source: String = ""
+
+    var attribution: String { source.isEmpty ? by : by + ", " + source }
+
+    /// The built-in pick for the week containing `date`; `offset` steps through the others.
+    /// Weeks count from Monday 5 January 2026 by the local calendar, the same as the web app,
+    /// so everyone on a list sees the same quote.
+    static func weekly(for date: Date = Date(), offset: Int = 0) -> Quote? {
+        let all = Quotes.all
+        guard !all.isEmpty else { return nil }
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        guard let day = utc.date(from: parts),
+              let start = utc.date(from: DateComponents(year: 2026, month: 1, day: 5)),
+              let days = utc.dateComponents([.day], from: start, to: day).day else { return all.first }
+        let week = Int((Double(days) / 7).rounded(.down))
+        let n = all.count
+        return all[(((week + offset) % n) + n) % n]
     }
 }
 

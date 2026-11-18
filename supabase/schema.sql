@@ -32,6 +32,14 @@ create table if not exists public.lists (
   updated_at timestamptz not null default now()
 );
 
+-- The weekly quote. Blank quote = the built-in pick for the week
+-- (web/quotes.js, apple/Kay2Do/Quotes.swift); show_quote hides it.
+alter table public.lists add column if not exists quote text not null default ''
+  check (char_length(quote) <= 400);
+alter table public.lists add column if not exists quote_by text not null default ''
+  check (char_length(quote_by) <= 120);
+alter table public.lists add column if not exists show_quote boolean not null default true;
+
 create table if not exists public.list_members (
   list_id   uuid not null references public.lists (id) on delete cascade,
   user_id   uuid not null references auth.users (id) on delete cascade,

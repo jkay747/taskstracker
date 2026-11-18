@@ -248,9 +248,18 @@ private struct WeekSection: View {
     @State private var theme = ""
     @State private var because = ""
     @State private var loadedFor: String?
+    @State private var editingQuote = false
 
     var body: some View {
         Section {
+            if let quote = store.weeklyQuote {
+                QuoteRow(quote: quote)
+                    .padding(.vertical, 4)
+                if store.isManager {
+                    Button("Change Quote…") { editingQuote = true }
+                        .font(.callout)
+                }
+            }
             if store.isManager {
                 DatePicker("Week of", selection: Binding(
                     get: { DayString.date(store.list?.weekOf) ?? Date() },
@@ -274,6 +283,9 @@ private struct WeekSection: View {
             Text("This week")
         }
         .font(.system(.body, design: .serif))
+        .sheet(isPresented: $editingQuote) {
+            QuoteEditor().environmentObject(store)
+        }
         .onAppear(perform: sync)
         .onChange(of: store.list) { _, _ in sync() }
     }

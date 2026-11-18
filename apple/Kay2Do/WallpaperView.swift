@@ -88,6 +88,10 @@ struct WallpaperView: View {
                 Text("Week of " + week.formatted(date: .abbreviated, time: .omitted))
                     .font(label(10)).foregroundStyle(.secondary)
             }
+            if let quote = store.weeklyQuote {
+                QuoteRow(quote: quote, size: (fillsScreen ? 20 : 16) * scale)
+                    .padding(.top, 6 * scale)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

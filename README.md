@@ -14,7 +14,7 @@ Features, everywhere:
 
 - Categories (rename, recolor, reorder, add up to 12)
 - Tasks with due dates, notes, a star for top priority, an owner and other people on the task
-- A weekly theme line ("This week will be… because…") and a top-three priorities panel
+- A weekly theme line ("This week will be… because…"), a weekly quote, and a top-three priorities panel
 - Search, an owner filter (Everyone / Mine / Unassigned / a person) and a show-completed switch
 - Several lists per account, each shared with its own people
 - Roles: **owner** (everything, including who's on the list), **editor** (anything but people), **contributor** (adds tasks; checks off and edits the ones they own, are on, or created)
@@ -54,6 +54,12 @@ Needs Xcode 16 or later. A free Apple account is enough to run it on your own Ma
 ### 5. Sign in and bring over the old web list
 
 Sign in once (web or app) with your email. You'll land on "Create my list". To bring over the tasks from the old Claude-hosted "Jason Kay To Dos" page instead, run the one-time import SQL in the SQL Editor, then reload.
+
+## Weekly quote
+
+Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to step through the picks or type their own, and can turn quotes off under List settings.
+
+The built-in quotes are all from public-domain texts or translations, so the app can be shared or sold. Writers still under copyright (Alan Watts, for example) aren't built in; type their words in as the week's quote. To edit the library, change `tools/quotes.py` and run `python3 tools/quotes.py`, which regenerates `web/quotes.js` and `apple/Kay2Do/Quotes.swift`.
 
 ## Sharing a list
 
