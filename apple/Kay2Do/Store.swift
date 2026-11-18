@@ -236,12 +236,15 @@ final class Store: ObservableObject {
     }
 
     /// Foreground: refresh at once and keep refreshing. Background: stop.
+    /// Set while the list is shown on the Mac desktop, so it keeps updating in the background.
+    var keepsRefreshing = false
+
     func setActive(_ active: Bool) {
         if active {
             guard phase == .ready else { return }
             refreshNow()
             startPolling()
-        } else {
+        } else if !keepsRefreshing {
             stopPolling()
         }
     }

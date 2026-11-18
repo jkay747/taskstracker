@@ -65,6 +65,12 @@ struct ContentView: View {
                         Button("New List…") { newListName = ""; askNewList = true }
                         Button("Refresh") { store.refreshNow() }
                         Button("List Settings…") { showSettings = true }
+                        #if os(macOS)
+                        Divider()
+                        Menu("Show on Desktop") {
+                            WallpaperMenu()
+                        }
+                        #endif
                         Divider()
                         Button("Sign Out") { Task { await store.signOut() } }
                     } label: {
