@@ -22,7 +22,7 @@ Features, everywhere:
 
 ## Set up
 
-This repo is already connected to its Supabase project (`twdhmugbmvqpahjaambj`): the URL and publishable key are in `web/config.js` and `apple/Kay2Do/SupabaseConfig.swift`. To point it at a different project, change those two files.
+This repo is already connected to its Supabase project (`qgeyztbxylsuihpzpnlb`, named taskstracker): the URL and publishable key are in `web/config.js` and `apple/Kay2Do/SupabaseConfig.swift`. To point it at a different project, change those two files.
 
 ### 1. Supabase (done for this project)
 

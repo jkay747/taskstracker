@@ -7,6 +7,6 @@ import Foundation
 /// Leave these blank to paste them into the app the first time it opens
 /// instead; they're then kept on that device.
 enum SupabaseConfig {
-    static let url = "https://twdhmugbmvqpahjaambj.supabase.co"
-    static let anonKey = "sb_publishable_3X4ZM9rvKuU5s7MFdbF4Hw_aEh1zB5N"
+    static let url = "https://qgeyztbxylsuihpzpnlb.supabase.co"
+    static let anonKey = "sb_publishable_vEhP3QStrD7gKUtI3uBMXw_wFZbh1M2"
 }
