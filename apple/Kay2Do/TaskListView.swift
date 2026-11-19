@@ -104,6 +104,8 @@ struct TaskListView: View {
             .listStyle(.insetGrouped)
             #else
             .listStyle(.inset)
+            .scrollContentBackground(store.background == .none ? .automatic : .hidden)
+            .background { ListBackdrop() }
             #endif
         }
     }

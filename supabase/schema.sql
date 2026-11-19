@@ -40,6 +40,14 @@ alter table public.lists add column if not exists quote_by text not null default
   check (char_length(quote_by) <= 120);
 alter table public.lists add column if not exists show_quote boolean not null default true;
 
+-- Background picture (web and Mac only): '' none, 'library:<id>' for a built-in
+-- picture (web/backgrounds.js), or 'upload:<list id>/<file>' for a photo in the
+-- private "backgrounds" storage bucket below.
+alter table public.lists add column if not exists background text not null default ''
+  check (background = '' or background ~ '^(library|upload):[A-Za-z0-9._/-]{1,200}$');
+alter table public.lists add column if not exists background_style text not null default 'balanced'
+  check (background_style in ('subtle', 'balanced', 'vivid'));
+
 create table if not exists public.list_members (
   list_id   uuid not null references public.lists (id) on delete cascade,
   user_id   uuid not null references auth.users (id) on delete cascade,
@@ -317,6 +325,41 @@ drop policy if exists "managers or creator delete tasks" on public.tasks;
 create policy "managers or creator delete tasks" on public.tasks for delete to authenticated
   using (public.list_role(list_id) in ('owner', 'editor')
          or (public.list_role(list_id) = 'contributor' and created_by = auth.uid()));
+
+-- ---------------------------------------------------------------- uploaded background photos
+
+-- Your role on the list a stored file belongs to; files live at '<list id>/<name>'.
+create or replace function public.list_role_for_object(p_name text)
+returns text language sql stable security definer set search_path = public as $$
+  select case when split_part(p_name, '/', 1) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              then public.list_role(split_part(p_name, '/', 1)::uuid) end
+$$;
+grant execute on function public.list_role_for_object(text) to authenticated;
+
+-- A private bucket: everyone on a list can see its photos; owners and editors
+-- can add and remove them. Up to 10 MB each (the apps shrink photos first).
+do $$
+begin
+  if exists (select 1 from pg_namespace where nspname = 'storage') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('backgrounds', 'backgrounds', false, 10485760, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update
+      set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+    execute 'drop policy if exists "kay2do backgrounds read" on storage.objects';
+    execute 'create policy "kay2do backgrounds read" on storage.objects for select to authenticated
+      using (bucket_id = ''backgrounds'' and public.list_role_for_object(name) is not null)';
+    execute 'drop policy if exists "kay2do backgrounds add" on storage.objects';
+    execute 'create policy "kay2do backgrounds add" on storage.objects for insert to authenticated
+      with check (bucket_id = ''backgrounds'' and public.list_role_for_object(name) in (''owner'', ''editor''))';
+    execute 'drop policy if exists "kay2do backgrounds change" on storage.objects';
+    execute 'create policy "kay2do backgrounds change" on storage.objects for update to authenticated
+      using (bucket_id = ''backgrounds'' and public.list_role_for_object(name) in (''owner'', ''editor''))';
+    execute 'drop policy if exists "kay2do backgrounds remove" on storage.objects';
+    execute 'create policy "kay2do backgrounds remove" on storage.objects for delete to authenticated
+      using (bucket_id = ''backgrounds'' and public.list_role_for_object(name) in (''owner'', ''editor''))';
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------- live updates
 

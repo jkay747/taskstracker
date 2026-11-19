@@ -44,6 +44,8 @@ final class WallpaperController: ObservableObject {
     @Published var clickable: Bool { didSet { save(); rebuild() } }
     @Published var allScreens: Bool { didSet { save(); rebuild() } }
     @Published var mineOnly: Bool { didSet { save() } }
+    /// Fills the screen with the list's background picture, behind the desktop icons.
+    @Published var usePhoto: Bool { didSet { save(); rebuild() } }
     @Published private(set) var loginError: String?
 
     private var store: Store?
@@ -58,6 +60,7 @@ final class WallpaperController: ObservableObject {
         clickable = d.object(forKey: "wallpaper.clickable") as? Bool ?? true
         allScreens = d.bool(forKey: "wallpaper.allScreens")
         mineOnly = d.bool(forKey: "wallpaper.mineOnly")
+        usePhoto = d.bool(forKey: "wallpaper.usePhoto")
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -80,6 +83,7 @@ final class WallpaperController: ObservableObject {
         d.set(clickable, forKey: "wallpaper.clickable")
         d.set(allScreens, forKey: "wallpaper.allScreens")
         d.set(mineOnly, forKey: "wallpaper.mineOnly")
+        d.set(usePhoto, forKey: "wallpaper.usePhoto")
     }
 
     private func rebuild() {
@@ -92,6 +96,29 @@ final class WallpaperController: ObservableObject {
         if store.phase == .ready { store.startPolling() }
 
         let screens = allScreens ? NSScreen.screens : [NSScreen.main ?? NSScreen.screens.first].compactMap { $0 }
+        if usePhoto {
+            // The picture goes in its own window at the desktop-picture level, under the
+            // icons and under the list, and never takes clicks.
+            for screen in screens {
+                let panel = DesktopPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
+                                         backing: .buffered, defer: false)
+                panel.isOpaque = false
+                panel.backgroundColor = .clear
+                panel.hasShadow = false
+                panel.hidesOnDeactivate = false
+                panel.isReleasedWhenClosed = false
+                panel.animationBehavior = .none
+                panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
+                panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+                panel.ignoresMouseEvents = true
+                let host = DesktopHostingView(rootView: AnyView(DesktopPhotoView().environmentObject(store)))
+                host.sizingOptions = []
+                panel.contentView = host
+                panel.setFrame(screen.frame, display: true)
+                panel.orderFront(nil)
+                panels.append(panel)
+            }
+        }
         for screen in screens {
             let frame = frame(on: screen)
             let panel = DesktopPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
@@ -189,6 +216,7 @@ struct WallpaperMenu: View {
         Toggle("Only My Tasks", isOn: $wall.mineOnly)
         Toggle("Check Off from the Desktop", isOn: $wall.clickable)
         Toggle("Show on All Displays", isOn: $wall.allScreens)
+        Toggle("Use the List's Picture as the Desktop Picture", isOn: $wall.usePhoto)
         Divider()
         Toggle("Open Kay2-Do at Login", isOn: Binding(
             get: { wall.opensAtLogin },

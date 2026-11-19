@@ -343,6 +343,47 @@ final class Store: ObservableObject {
         write("save the quote setting") { try await $0.update("lists", fields: ["show_quote": show], where: [("id", "eq." + id)]) }
     }
 
+    // MARK: Background picture (Mac and web)
+
+    var background: BackgroundChoice { BackgroundChoice(list?.background ?? "") }
+    var backgroundStyle: String { list?.backgroundStyle ?? "balanced" }
+
+    func setBackground(_ value: String, style: String) {
+        guard isManager, var current = list, current.background != value || current.backgroundStyle != style else { return }
+        let old = current.background
+        current.background = value
+        current.backgroundStyle = style
+        list = current
+        let id = current.id
+        write("save the background") { backend in
+            try await backend.update("lists", fields: ["background": value, "background_style": style], where: [("id", "eq." + id)])
+            if old.hasPrefix("upload:"), old != value {
+                try? await backend.removeObjects(bucket: "backgrounds", paths: [String(old.dropFirst(7))])
+            }
+        }
+    }
+
+    /// Uploads a JPEG to the list's photo folder; returns the value to pass to setBackground.
+    func uploadBackground(jpeg: Data) async throws -> String {
+        guard let backend, let id = listID else { throw BackendError(message: "Open a list first.") }
+        let path = id + "/" + UUID().uuidString.lowercased() + ".jpg"
+        try await backend.uploadObject(bucket: "backgrounds", path: path, data: jpeg, contentType: "image/jpeg")
+        return "upload:" + path
+    }
+
+    func downloadBackground(path: String) async throws -> Data {
+        guard let backend else { throw BackendError(message: "Sign in first.") }
+        return try await backend.downloadObject(bucket: "backgrounds", path: path)
+    }
+
+    /// Removes photos uploaded in the settings sheet that didn't end up being used.
+    func discardUploads(_ values: [String]) {
+        let keep = list?.background ?? ""
+        let paths = values.filter { $0 != keep && $0.hasPrefix("upload:") }.map { String($0.dropFirst(7)) }
+        guard let backend, !paths.isEmpty else { return }
+        Task { try? await backend.removeObjects(bucket: "backgrounds", paths: paths) }
+    }
+
     // MARK: Tasks
 
     func permissions(for task: TaskItem) -> (edit: Bool, delete: Bool) {

@@ -252,6 +252,48 @@ final class Backend {
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
 
+    // MARK: Storage (uploaded background photos)
+
+    private func objectURL(_ prefix: String, _ bucket: String, _ path: String) throws -> URL {
+        let escaped = path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+        guard let url = URL(string: baseURL + "/storage/v1/object/" + prefix + bucket + "/" + escaped) else {
+            throw BackendError(message: "The Supabase URL isn't valid.")
+        }
+        return url
+    }
+
+    func uploadObject(bucket: String, path: String, data: Data, contentType: String) async throws {
+        var request = URLRequest(url: try objectURL("", bucket, path))
+        request.httpMethod = "POST"
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("false", forHTTPHeaderField: "x-upsert")
+        request.timeoutInterval = 120
+        let (body, response) = try await http.upload(for: request, from: data)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw BackendError(message: Self.message(from: body, status: status), status: status)
+        }
+    }
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        var request = URLRequest(url: try objectURL("authenticated/", bucket, path))
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
+        let (data, response) = try await http.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw BackendError(message: Self.message(from: data, status: status), status: status)
+        }
+        return data
+    }
+
+    func removeObjects(bucket: String, paths: [String]) async throws {
+        guard !paths.isEmpty else { return }
+        try await request("DELETE", "storage/v1/object/" + bucket, body: ["prefixes": paths])
+    }
+
     static let decoder = JSONDecoder()
     static let encoder = JSONEncoder()
 }

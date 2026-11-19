@@ -16,6 +16,7 @@ Features, everywhere:
 - Tasks with due dates, notes, a star for top priority, an owner and other people on the task
 - A weekly theme line ("This week will be… because…"), a weekly quote, and a top-three priorities panel
 - Search, an owner filter (Everyone / Mine / Unassigned / a person) and a show-completed switch
+- A background picture, built-in or your own photo (web and Mac)
 - Several lists per account, each shared with its own people
 - Roles: **owner** (everything, including who's on the list), **editor** (anything but people), **contributor** (adds tasks; checks off and edits the ones they own, are on, or created)
 
@@ -60,6 +61,16 @@ Sign in once (web or app) with your email. You'll land on "Create my list". To b
 Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to step through the picks or type their own, and can turn quotes off under List settings.
 
 The built-in quotes are all from public-domain texts or translations, so the app can be shared or sold. Writers still under copyright (Alan Watts, for example) aren't built in; type their words in as the week's quote. To edit the library, change `tools/quotes.py` and run `python3 tools/quotes.py`, which regenerates `web/quotes.js` and `apple/Kay2Do/Quotes.swift`.
+
+## Background picture (web and Mac)
+
+Owners and editors can put a picture behind the list under **List settings → Background picture**: one of 14 built-in public-domain pictures (Hokusai, Van Gogh, Monet, Friedrich, Aivazovsky, Bierstadt, Moran, Ansel Adams's National Park Service work, and NASA/Hubble photos, served by Wikimedia Commons), or a photo you upload. **Photo** sets how strongly it shows through: Subtle, Balanced or Vivid. Everyone on the list sees it on the web and in the Mac app; the iPhone app doesn't show backgrounds.
+
+Uploads are shrunk to at most 3840 pixels on the long side and stored in the private `backgrounds` bucket in Supabase Storage, in a folder for the list. Only people on the list can see them, and only owners and editors can add or remove them. A replaced photo is deleted.
+
+In the Mac app's **Desktop** menu, **Use the List's Picture as the Desktop Picture** fills the screen with it behind the desktop list.
+
+To change the built-in pictures, edit `tools/backgrounds.py` and run `python3 tools/backgrounds.py`, which regenerates `web/backgrounds.js` and `apple/Kay2Do/Backgrounds.swift`. Use only public-domain files, and only Wikimedia's standard thumbnail widths (500, 1920, 3840).
 
 ## Sharing a list
 

@@ -56,12 +56,17 @@ struct TaskList: Codable, Identifiable, Equatable {
     var quote: String
     var quoteBy: String
     var showQuote: Bool
+    /// "", "library:<id>" or "upload:<list id>/<file>"; see BackgroundChoice.
+    var background: String
+    /// "subtle", "balanced" or "vivid": how strongly the picture shows through.
+    var backgroundStyle: String
 
     enum CodingKeys: String, CodingKey {
-        case id, name, theme, because, quote
+        case id, name, theme, because, quote, background
         case weekOf = "week_of"
         case quoteBy = "quote_by"
         case showQuote = "show_quote"
+        case backgroundStyle = "background_style"
     }
 
     init(from decoder: Decoder) throws {
@@ -74,6 +79,43 @@ struct TaskList: Codable, Identifiable, Equatable {
         quote = try c.decodeIfPresent(String.self, forKey: .quote) ?? ""
         quoteBy = try c.decodeIfPresent(String.self, forKey: .quoteBy) ?? ""
         showQuote = try c.decodeIfPresent(Bool.self, forKey: .showQuote) ?? true
+        background = try c.decodeIfPresent(String.self, forKey: .background) ?? ""
+        backgroundStyle = try c.decodeIfPresent(String.self, forKey: .backgroundStyle) ?? "balanced"
+    }
+}
+
+/// A built-in background picture (Backgrounds.swift): public domain, served by Wikimedia Commons.
+struct BackgroundPhoto: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let credit: String
+    let full: String
+    let thumb: String
+    let page: String
+}
+
+/// What a list shows behind it (Mac and web only).
+enum BackgroundChoice: Equatable {
+    case none
+    case library(BackgroundPhoto)
+    case upload(path: String)
+
+    init(_ value: String) {
+        if value.hasPrefix("library:"), let photo = Backgrounds.all.first(where: { $0.id == String(value.dropFirst(8)) }) {
+            self = .library(photo)
+        } else if value.hasPrefix("upload:"), value.count > 7 {
+            self = .upload(path: String(value.dropFirst(7)))
+        } else {
+            self = .none
+        }
+    }
+
+    var value: String {
+        switch self {
+        case .none: return ""
+        case .library(let photo): return "library:" + photo.id
+        case .upload(let path): return "upload:" + path
+        }
     }
 }
 

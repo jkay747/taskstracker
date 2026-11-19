@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var myName = ""
     @State private var listName = ""
     @State private var showQuote = true
+    @State private var background = ""
+    @State private var backgroundStyle = "balanced"
+    @State private var uploadedBackgrounds: [String] = []
     @State private var drafts: [Store.CategoryDraft] = []
     @State private var newCategory = ""
     @State private var removing: Store.CategoryDraft?
@@ -31,6 +34,9 @@ struct SettingsView: View {
                         Toggle("Show a weekly quote", isOn: $showQuote)
                     }
                     categoriesSection
+                    #if os(macOS)
+                    BackgroundSettings(value: $background, style: $backgroundStyle, uploaded: $uploadedBackgrounds)
+                    #endif
                 }
 
                 PeopleSettings()
@@ -63,7 +69,10 @@ struct SettingsView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        store.discardUploads(uploadedBackgrounds)
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -71,7 +80,11 @@ struct SettingsView: View {
                         if store.isManager {
                             store.applySettings(listName: listName, drafts: drafts)
                             store.setShowQuote(showQuote)
+                            #if os(macOS)
+                            store.setBackground(background, style: backgroundStyle)
+                            #endif
                         }
+                        store.discardUploads(uploadedBackgrounds)
                         dismiss()
                     }
                     .disabled(live.contains { $0.label.trimmingCharacters(in: .whitespaces).isEmpty })
@@ -96,6 +109,8 @@ struct SettingsView: View {
             myName = store.myName
             listName = store.listName
             showQuote = store.list?.showQuote ?? true
+            background = store.list?.background ?? ""
+            backgroundStyle = store.backgroundStyle
             drafts = store.categoryDrafts()
         }
         #if os(macOS)

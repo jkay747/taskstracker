@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="quotes.js"></script>
+<script src="backgrounds.js"></script>
 <style>
 /* A planner sheet: ruled lines, boxed category headers, square checkboxes; one column per category, or one wide sheet when a category is picked. */
 :root {
@@ -54,6 +55,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .quote { margin: 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--k3); display: grid; gap: 4px; max-width: 920px; }
 .quote blockquote { margin: 0; font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 2vw, 21px); line-height: 1.35; text-wrap: pretty; }
 .quote figcaption { font-size: 13px; color: var(--muted); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+
+/* Background picture: the list sits on a frosted sheet over it. */
+body.has-bg { background: #1b1c20 var(--bg-image) center / cover no-repeat fixed; }
+body.has-bg #app.wrap { margin: clamp(12px, 3vw, 40px) auto; width: min(1320px, calc(100% - 2 * clamp(12px, 3vw, 40px))); border-radius: 18px;
+  background: color-mix(in srgb, var(--paper) var(--sheet-mix, 84%), transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15); backdrop-filter: blur(18px) saturate(1.15);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .35); }
+body.bg-subtle { --sheet-mix: 94%; }
+body.bg-balanced { --sheet-mix: 85%; }
+body.bg-vivid { --sheet-mix: 70%; }
+.bgcredit { position: fixed; right: 12px; bottom: 8px; z-index: 5; font-size: 11px; color: #fff; text-decoration: none; opacity: .85; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+.bgcredit:hover { opacity: 1; text-decoration: underline; }
+.bggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.bgtile { aspect-ratio: 4 / 3; border: 1.5px solid var(--rule); background: var(--paper) center / cover no-repeat; cursor: pointer; padding: 0; font-size: 12px; color: var(--muted); display: grid; place-items: center; }
+.bgtile[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.bgtile span { background: var(--sheet); padding: 2px 6px; }
 
 .banner { border: 1px solid var(--rule); background: var(--sheet); border-left: 4px solid var(--accent); padding: 10px 14px; font-size: 14px; display: grid; gap: 8px; }
 .banner p { margin: 0; max-width: 75ch; }
@@ -176,8 +193,9 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   .viewpick select { min-width: 0; width: 100%; }
 }
 @media print {
-  .toolbar, .add, .star, .mast .right, .banner, .scrim { display: none !important; }
-  body { background: #fff; }
+  .toolbar, .add, .star, .mast .right, .banner, .scrim, .bgcredit { display: none !important; }
+  body, body.has-bg { background: #fff !important; }
+  body.has-bg #app.wrap { background: #fff; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; margin: 0 auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
@@ -257,6 +275,8 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   <main class="board" id="board"></main>
 </div>
 
+<a class="bgcredit" id="bgCredit" target="_blank" rel="noopener" hidden></a>
+
 <!-- Task editor -->
 <div class="scrim" id="scrim" hidden>
   <form class="panel" id="editor" role="dialog" aria-modal="true" aria-labelledby="edTitle">
@@ -317,6 +337,18 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
         <span class="label">Categories</span>
         <div class="catlist" id="catList"></div>
         <div class="inline"><input id="newCat" type="text" maxlength="40" placeholder="New category name" aria-label="New category name" style="flex:1;min-width:0;border:1px solid var(--rule);background:var(--paper);padding:7px 9px"><button type="button" class="btn sm" id="addCat">Add category</button></div>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <span class="label">Background picture</span>
+        <div class="bggrid" id="bgGrid"></div>
+        <div class="inline">
+          <label class="btn sm" for="bgFile" style="cursor:pointer">Upload a photo…</label>
+          <input id="bgFile" type="file" accept="image/*" hidden>
+          <label class="muted" for="bgStyle" style="font-size:13px">Photo</label>
+          <select id="bgStyle" style="border:1px solid var(--rule);background:var(--paper);padding:5px 7px"><option value="subtle">Subtle</option><option value="balanced">Balanced</option><option value="vivid">Vivid</option></select>
+          <span class="hint" id="bgStatus"></span>
+        </div>
+        <div class="hint">Shows behind the list on the web and in the Mac app, for everyone on this list. The built-in pictures are public-domain paintings and NASA and National Park Service photos from Wikimedia Commons.</div>
       </div>
     </div>
     <div class="field">
@@ -621,6 +653,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     if (document.activeElement !== $("themeText")) $("themeText").value = l.theme || "";
     if (document.activeElement !== $("themeWhy")) $("themeWhy").value = l.because || "";
     drawQuote();
+    applyBackground();
   }
   async function saveWeek() {
     if (!S.list || !isManager()) return;
@@ -685,6 +718,100 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   $("qPanel").addEventListener("submit", e => { e.preventDefault(); closeQuote(); saveQuote($("qText").value, $("qBy").value); });
   $("qCancel").addEventListener("click", closeQuote);
   $("qScrim").addEventListener("mousedown", e => { if (e.target === $("qScrim")) closeQuote(); });
+
+  // ---------- background picture ----------
+  const BGS = Array.isArray(window.KAY2DO_BACKGROUNDS) ? window.KAY2DO_BACKGROUNDS : [];
+  const signedUrls = {};
+  async function backgroundFor(value) {
+    if (!value) return null;
+    if (value.startsWith("library:")) {
+      const b = BGS.find(x => x.id === value.slice(8));
+      return b ? { url: b.full, thumb: b.thumb, credit: b } : null;
+    }
+    if (value.startsWith("upload:") && S.sb) {
+      const path = value.slice(7);
+      const hit = signedUrls[path];
+      if (hit && Date.now() - hit.at < 6 * 3600e3) return { url: hit.url, thumb: hit.url };
+      const { data, error } = await S.sb.storage.from("backgrounds").createSignedUrl(path, 24 * 3600);
+      if (error || !data || !data.signedUrl) return null;
+      signedUrls[path] = { url: data.signedUrl, at: Date.now() };
+      return { url: data.signedUrl, thumb: data.signedUrl };
+    }
+    return null;
+  }
+  const preload = url => new Promise(res => { const i = new Image(); i.onload = () => res(true); i.onerror = () => res(false); i.src = url; });
+  let bgSeq = 0, bgShown = "";
+  async function applyBackground() {
+    const l = (S.listId && S.list) || {};
+    const value = l.background || "", style = l.background_style || "balanced";
+    const key = value + "|" + style;
+    if (key === bgShown) return;
+    const seq = ++bgSeq;
+    const b = await backgroundFor(value);
+    if (b && !(await preload(b.url))) { if (seq === bgSeq) showBanner("Couldn't load the background picture."); }
+    if (seq !== bgSeq) return;
+    bgShown = key;
+    const body = document.body;
+    body.classList.toggle("has-bg", !!b);
+    body.classList.remove("bg-subtle", "bg-balanced", "bg-vivid");
+    if (b) { body.classList.add("bg-" + style); body.style.setProperty("--bg-image", 'url("' + b.url.replace(/"/g, "%22") + '")'); }
+    else body.style.removeProperty("--bg-image");
+    const cr = $("bgCredit");
+    if (b && b.credit) { cr.textContent = b.credit.title + " — " + b.credit.credit; cr.href = b.credit.page; cr.hidden = false; }
+    else cr.hidden = true;
+  }
+
+  // Photos are shrunk to at most 3840 pixels on the long side and saved as JPEG.
+  async function shrinkPhoto(file) {
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+    catch (e) { throw new Error("This browser can't open that file. Try a JPEG or PNG."); }
+    const k = Math.min(1, 3840 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("Couldn't prepare that photo.")), "image/jpeg", 0.86));
+  }
+
+  let bgDraft = null, bgUploaded = [], bgGridSeq = 0;
+  async function drawBgGrid() {
+    const grid = $("bgGrid");
+    const seq = ++bgGridSeq;
+    const tile = (value, label, thumb, title) => h("button", { type: "button", class: "bgtile", title: title || label,
+      "aria-pressed": String(bgDraft.value === value), "aria-label": title || label,
+      style: thumb ? 'background-image:url("' + thumb.replace(/"/g, "%22") + '")' : null,
+      onclick: () => { bgDraft.value = value; drawBgGrid(); } }, thumb ? null : h("span", { text: label }));
+    const tiles = [tile("", "None")];
+    const uploads = [...new Set([(S.list && S.list.background) || "", bgDraft.value, ...bgUploaded.map(p => "upload:" + p)])].filter(v => v.startsWith("upload:"));
+    for (const v of uploads) { const b = await backgroundFor(v); tiles.push(tile(v, "Your photo", b && b.thumb, "Your photo")); }
+    BGS.forEach(b => tiles.push(tile("library:" + b.id, b.title, b.thumb, b.title + " — " + b.credit)));
+    if (bgDraft && seq === bgGridSeq) grid.replaceChildren(...tiles);
+  }
+  $("bgFile").addEventListener("change", async e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || !bgDraft) return;
+    $("bgStatus").textContent = "Uploading…";
+    try {
+      const blob = await shrinkPhoto(file);
+      const path = S.listId + "/" + newId() + ".jpg";
+      const { error } = await S.sb.storage.from("backgrounds").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (error) throw error;
+      bgUploaded.push(path);
+      bgDraft.value = "upload:" + path;
+      await drawBgGrid();
+      $("bgStatus").textContent = "Uploaded. Press Save settings to use it.";
+    } catch (err) {
+      $("bgStatus").textContent = (err && err.message) || "Upload failed.";
+    }
+  });
+  // Uploads made in the settings sheet but not kept are removed again.
+  function discardUnusedUploads() {
+    const keep = (S.list && S.list.background) || "";
+    const junk = bgUploaded.filter(p => "upload:" + p !== keep);
+    bgUploaded = [];
+    if (junk.length && S.sb) S.sb.storage.from("backgrounds").remove(junk).catch(() => {});
+  }
 
   // ---------- filters ----------
   function matches(t) {
@@ -957,11 +1084,14 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     $("inviteForm").hidden = S.role !== "owner";
     $("leaveList").hidden = S.role === "owner";
     $("newCat").value = ""; $("setErr").textContent = ""; $("inviteText").hidden = true; $("copyStatus").textContent = "";
+    bgDraft = { value: (S.list && S.list.background) || "", style: (S.list && S.list.background_style) || "balanced" };
+    bgUploaded = []; $("bgStatus").textContent = ""; $("bgStyle").value = bgDraft.style;
+    if (isManager()) drawBgGrid();
     drawCatList(); drawPeopleList();
     $("setScrim").hidden = false;
     setTimeout(() => $("sMyName").focus(), 0);
   }
-  function closeSettings() { $("setScrim").hidden = true; catDraft = null; }
+  function closeSettings() { $("setScrim").hidden = true; catDraft = null; bgDraft = null; discardUnusedUploads(); }
   function drawCatList() {
     const list = $("catList"); list.replaceChildren();
     const live = catDraft.filter(c => !c.removing);
@@ -1070,6 +1200,14 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       if (keep.some(c => !c.label.trim())) { $("setErr").textContent = "Every category needs a name."; return; }
       const name = $("sName").value.trim().slice(0, 60) || "Kay2-Do";
       const ops = [];
+      const bgValue = bgDraft ? bgDraft.value : ((S.list && S.list.background) || "");
+      const bgStyle = $("bgStyle").value;
+      const oldBg = S.list.background || "";
+      if (bgValue !== oldBg || bgStyle !== (S.list.background_style || "balanced")) {
+        ops.push(S.sb.from("lists").update({ background: bgValue, background_style: bgStyle }).eq("id", S.listId));
+        S.list.background = bgValue; S.list.background_style = bgStyle;
+        if (oldBg.startsWith("upload:") && oldBg !== bgValue) S.sb.storage.from("backgrounds").remove([oldBg.slice(7)]).catch(() => {});
+      }
       const showQuote = $("sShowQuote").checked;
       if (name !== S.list.name || showQuote !== (S.list.show_quote !== false)) {
         ops.push(S.sb.from("lists").update({ name, show_quote: showQuote }).eq("id", S.listId));
@@ -1128,7 +1266,8 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       if (id) { setTimeout(afterSignIn, 0); }
       else {
         if (channel) { S.sb.removeChannel(channel); channel = null; }
-        S.meId = null; S.listId = null; S.role = null; S.tasks = new Map();
+        S.meId = null; S.listId = null; S.role = null; S.tasks = new Map(); S.list = null;
+        applyBackground();
         resetSignin(); show("signinGate");
       }
     });
