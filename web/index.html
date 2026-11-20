@@ -504,6 +504,13 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     $("siGo").textContent = "Send sign-in link"; $("siLead").textContent = "Sign in with your email. We'll send you a sign-in link."; $("siErr").textContent = "";
   }
   $("siBack").addEventListener("click", resetSignin);
+  // Enter in the email or code box always sends, even when an autofill or
+  // password-manager dropdown would otherwise take the keypress.
+  ["siEmail", "siCode"].forEach(id => $(id).addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.isComposing || $("siGo").disabled) return;
+    e.preventDefault();
+    $("signinGate").requestSubmit($("siGo"));
+  }));
   $("signinGate").addEventListener("submit", async e => {
     e.preventDefault();
     $("siErr").textContent = ""; $("siGo").disabled = true;
