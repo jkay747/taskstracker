@@ -8,6 +8,9 @@ struct WallpaperView: View {
 
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var wall: WallpaperController
+    @AppStorage(TextAppearance.fontKey) private var fontName = ""
+    @AppStorage(TextAppearance.sizeKey) private var fontSize: Double = 0
+    @AppStorage(TextAppearance.colorKey) private var fontColor = ""
 
     private var scale: CGFloat { wall.textSize.scale }
     private var rowLimit: Int { fillsScreen ? 12 : 6 }
@@ -189,7 +192,8 @@ private struct WallTaskRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title)
-                    .font(.system(size: 14 * scale))
+                    .font(TextAppearance.font(name: fontName, size: fontSize, scale: Double(14 * scale) / TextAppearance.defaultSize))
+                    .foregroundStyle(TextAppearance.color(fontColor) ?? Color.primary)
                     .lineLimit(2)
                 if !meta.isEmpty {
                     Text(meta)

@@ -6,6 +6,9 @@ struct TaskRow: View {
     let onOpen: () -> Void
 
     @EnvironmentObject private var store: Store
+    @AppStorage(TextAppearance.fontKey) private var fontName = ""
+    @AppStorage(TextAppearance.sizeKey) private var fontSize: Double = 0
+    @AppStorage(TextAppearance.colorKey) private var fontColor = ""
 
     private var editable: Bool { store.canEdit(task) }
     private var deletable: Bool { store.canDelete(task) }
@@ -26,11 +29,12 @@ struct TaskRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title.isEmpty ? "(untitled)" : task.title)
+                    .font(TextAppearance.font(name: fontName, size: fontSize))
                     .strikethrough(task.done)
-                    .foregroundStyle(task.done ? Color.secondary : Color.primary)
+                    .foregroundStyle(task.done ? Color.secondary : (TextAppearance.color(fontColor) ?? Color.primary))
                 if hasMeta {
                     meta
-                        .font(.caption)
+                        .font(TextAppearance.metaFont(name: fontName, size: fontSize))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }

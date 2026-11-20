@@ -14,6 +14,12 @@ struct SettingsView: View {
     @State private var newCategory = ""
     @State private var removing: Store.CategoryDraft?
     @State private var loaded = false
+    @State private var fontName = ""
+    @State private var fontSize: Double = 0
+    @State private var fontColor = ""
+    @AppStorage(TextAppearance.fontKey) private var savedFontName = ""
+    @AppStorage(TextAppearance.sizeKey) private var savedFontSize: Double = 0
+    @AppStorage(TextAppearance.colorKey) private var savedFontColor = ""
 
     private var live: [Store.CategoryDraft] { drafts.filter { !$0.removing } }
 
@@ -27,6 +33,8 @@ struct SettingsView: View {
                 } footer: {
                     Text("How you appear to everyone on your lists. Signed in as \(store.myEmail).")
                 }
+
+                TextAppearanceSection(fontName: $fontName, fontSize: $fontSize, fontColor: $fontColor)
 
                 if store.isManager {
                     Section("List name") {
@@ -77,6 +85,9 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         store.setMyName(myName)
+                        savedFontName = fontName
+                        savedFontSize = fontSize
+                        savedFontColor = fontColor
                         if store.isManager {
                             store.applySettings(listName: listName, drafts: drafts)
                             store.setShowQuote(showQuote)
@@ -112,6 +123,9 @@ struct SettingsView: View {
             background = store.list?.background ?? ""
             backgroundStyle = store.backgroundStyle
             drafts = store.categoryDrafts()
+            fontName = savedFontName
+            fontSize = savedFontSize
+            fontColor = savedFontColor
         }
         #if os(macOS)
         .frame(minWidth: 520, minHeight: 600)

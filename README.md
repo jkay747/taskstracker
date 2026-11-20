@@ -52,6 +52,24 @@ Needs Xcode 16 or later. A free Apple account is enough to run it on your own Ma
 2. Select the **Kay2Do** target → **Signing & Capabilities** → choose your **Team**. Change the bundle identifier if Xcode says it's taken.
 3. Pick **My Mac** or your iPhone and press **Run**.
 
+### 4b. TestFlight (automatic iPhone builds)
+
+`.github/workflows/testflight.yml` archives the iPhone app, signs it and uploads it to TestFlight every time `apple/` changes on `main`. You can also run it by hand: **Actions → iPhone app to TestFlight → Run workflow**. Until the four secrets below exist it skips itself. Needs the paid Apple Developer Program.
+
+One-time setup:
+
+1. **Create the app in App Store Connect.** appstoreconnect.apple.com → **Apps → + → New App**: platform **iOS**, name **Kay2-Do** (or any name that's free), bundle ID **com.kay2ventures.Kay2Do**, SKU `kay2do`. If the bundle ID isn't in the list, register it first at developer.apple.com → **Certificates, IDs & Profiles → Identifiers → +** (App ID, explicit, `com.kay2ventures.Kay2Do`).
+2. **Create an API key.** App Store Connect → **Users and Access → Integrations → App Store Connect API → Team Keys → +**. Access: **Admin** (signing in the cloud needs it). Download the `.p8` file (Apple only lets you download it once) and note the **Key ID** and the **Issuer ID** shown above the list.
+3. **Find your Team ID**: developer.apple.com → **Account → Membership details**.
+4. **Add four repository secrets**: GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
+   - `APPLE_TEAM_ID`: the Team ID
+   - `ASC_KEY_ID`: the Key ID
+   - `ASC_ISSUER_ID`: the Issuer ID
+   - `ASC_KEY_P8`: open the `.p8` file in TextEdit and paste the whole thing, including the `BEGIN` and `END` lines
+5. Run the workflow once from the Actions tab. When it finishes, the build shows up in App Store Connect → **TestFlight** after Apple's processing (5–15 minutes). Add yourself under **Internal Testing** and install it with the **TestFlight** app on your iPhone.
+
+Build numbers come from the workflow's run number (101, 102, …), so each upload is newer than the last. Change `MARKETING_VERSION` in the project when you want a new version number (1.1, 2.0…).
+
 ### 5. Sign in and bring over the old web list
 
 Sign in once (web or app) with your email. You'll land on "Create my list". To bring over the tasks from the old Claude-hosted "Jason Kay To Dos" page instead, run the one-time import SQL in the SQL Editor, then reload.
@@ -94,8 +112,10 @@ You can assign a task to a typed name or email before someone has joined. It sho
 | `apple/Kay2Do/ContentView.swift` | Sidebar |
 | `apple/Kay2Do/TaskListView.swift`, `TaskRow.swift` | The list |
 | `apple/Kay2Do/TaskEditor.swift` | Task detail sheet |
-| `apple/Kay2Do/SettingsView.swift` | Your name, list name, categories, people |
+| `apple/Kay2Do/SettingsView.swift` | Your name, text look, list name, categories, people |
+| `apple/Kay2Do/TextAppearance.swift` | Font (system font picker), font size and font color for tasks, saved per device |
 | `.github/workflows/build.yml` | Compiles the Mac and iOS builds when `apple/` changes |
+| `.github/workflows/testflight.yml` | Archives, signs and uploads the iPhone app to TestFlight when `apple/` changes on `main` |
 | `.github/workflows/pages.yml` | Publishes `web/` to GitHub Pages when it changes on `main` |
 
 ## Not done yet
