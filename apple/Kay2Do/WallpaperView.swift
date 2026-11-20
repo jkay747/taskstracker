@@ -8,9 +8,6 @@ struct WallpaperView: View {
 
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var wall: WallpaperController
-    @AppStorage(TextAppearance.fontKey) private var fontName = ""
-    @AppStorage(TextAppearance.sizeKey) private var fontSize: Double = 0
-    @AppStorage(TextAppearance.colorKey) private var fontColor = ""
 
     private var scale: CGFloat { wall.textSize.scale }
     private var rowLimit: Int { fillsScreen ? 12 : 6 }
@@ -174,6 +171,9 @@ private struct WallTaskRow: View {
 
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var wall: WallpaperController
+    @AppStorage(TextAppearance.fontKey) private var fontName = ""
+    @AppStorage(TextAppearance.sizeKey) private var fontSize: Double = 0
+    @AppStorage(TextAppearance.colorKey) private var fontColor = ""
 
     private var scale: CGFloat { wall.textSize.scale }
     private var editable: Bool { wall.clickable && store.canEdit(task) }
