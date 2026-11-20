@@ -60,6 +60,9 @@ jobs:
         if: steps.setup.outputs.ready == 'true'
         run: xcodebuild -version
 
+      # The archive is built unsigned: signing it here would need a development
+      # profile, which Apple only issues to teams with a registered device. The
+      # export below signs it for App Store distribution instead.
       - name: Archive
         if: steps.setup.outputs.ready == 'true'
         run: |
@@ -70,12 +73,8 @@ jobs:
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Kay2Do.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$KEY_PATH" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=NO \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             | tee archive.log | grep -E "error:|warning: unre|ARCHIVE|\*\*" || true
           grep -q "ARCHIVE SUCCEEDED" archive.log
