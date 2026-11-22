@@ -24,18 +24,27 @@ struct QuoteRow: View {
     }
 }
 
-/// Type a quote for the week, step through the built-in ones, or go back to the weekly pick.
+/// Find a quote on Wikiquote, type one, step through the built-in ones, or go back to the weekly pick.
 struct QuoteEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var store: Store
     @State private var text = ""
     @State private var by = ""
     @State private var offset = 1
     @State private var loaded = false
 
+    @State private var term = ""
+    @State private var results: [FoundQuote] = []
+    @State private var picked: FoundQuote?
+    @State private var searching = false
+    @State private var searchStatus: String?
+    @State private var searchTask: Task<Void, Never>?
+
     var body: some View {
         NavigationStack {
             Form {
+                findSection
                 Section {
                     TextField("Leave blank for this week's pick", text: $text, axis: .vertical)
                         .lineLimit(2...6)
@@ -72,6 +81,7 @@ struct QuoteEditor: View {
                 }
             }
         }
+        .onDisappear { searchTask?.cancel() }
         .onAppear {
             guard !loaded, let list = store.list else { return }
             loaded = true
@@ -79,8 +89,88 @@ struct QuoteEditor: View {
             by = list.quoteBy
         }
         #if os(macOS)
-        .frame(minWidth: 460, minHeight: 380)
+        .frame(minWidth: 520, minHeight: 560)
         #endif
+    }
+
+    private var findSection: some View {
+        Section {
+            HStack {
+                TextField("A person or a topic: Rumi, courage…", text: $term)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.search)
+                    #endif
+                    .onSubmit(runSearch)
+                if searching {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Search", action: runSearch)
+                        .disabled(term.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            ForEach(results) { quote in
+                Button {
+                    picked = quote
+                    text = quote.text
+                    by = quote.by
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("“\(quote.text)”")
+                                .font(.system(.body, design: .serif).italic())
+                                .foregroundStyle(Color.primary)
+                                .multilineTextAlignment(.leading)
+                            Text("— " + quote.by)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        if picked == quote {
+                            Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(picked == quote ? .isSelected : [])
+            }
+        } header: {
+            Text("Find a Quote Online")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if let searchStatus { Text(searchStatus) }
+                if let picked, let url = picked.pageURL {
+                    Button("See it on Wikiquote") { openURL(url) }
+                        .buttonStyle(.borderless)
+                        .font(.footnote)
+                }
+            }
+        }
+    }
+
+    private func runSearch() {
+        let query = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        searchTask?.cancel()
+        searching = true
+        searchStatus = "Searching Wikiquote for “\(query)”…"
+        searchTask = Task { @MainActor in
+            defer { if !Task.isCancelled { searching = false } }
+            do {
+                let found = try await QuoteSearch.search(query)
+                guard !Task.isCancelled else { return }
+                results = found
+                picked = nil
+                searchStatus = found.isEmpty
+                    ? "No quotes found for “\(query)”. Try a person's full name or a single topic word."
+                    : "\(found.count) quote\(found.count == 1 ? "" : "s") from Wikiquote. Pick one to fill it in, then Save."
+            } catch {
+                guard !Task.isCancelled else { return }
+                searchStatus = error.localizedDescription
+            }
+        }
     }
 
     private func another() {

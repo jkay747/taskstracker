@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="quotes.js"></script>
+<script src="quote-search.js"></script>
 <script src="backgrounds.js"></script>
 <style>
 /* A planner sheet: ruled lines, boxed category headers, square checkboxes; one column per category, or one wide sheet when a category is picked. */
@@ -55,6 +56,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .quote { margin: 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--k3); display: grid; gap: 4px; max-width: 920px; }
 .quote blockquote { margin: 0; font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 2vw, 21px); line-height: 1.35; text-wrap: pretty; }
 .quote figcaption { font-size: 13px; color: var(--muted); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.qfind { display: flex; gap: 8px; }
+.qfind input { flex: 1; min-width: 0; border: 1px solid var(--rule); background: var(--paper); padding: 8px 10px; }
+.qresults { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow: auto; border: 1px solid var(--rule); background: var(--paper); }
+.qresults li + li { border-top: 1px dotted var(--rule); }
+.qresults button { display: grid; gap: 3px; width: 100%; text-align: left; border: 0; background: none; padding: 9px 11px; cursor: pointer; }
+.qresults button:hover, .qresults button[aria-pressed="true"] { background: var(--hover); }
+.qresults button[aria-pressed="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.qresults .qt { font-family: var(--font-display); font-style: italic; font-size: 15px; line-height: 1.35; }
+.qresults .qb { font-size: 12px; color: var(--muted); }
 
 /* Background picture: the list sits on a frosted sheet over it. */
 body.has-bg { background: #1b1c20 var(--bg-image) center / cover no-repeat fixed; }
@@ -316,6 +326,12 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
 <div class="scrim" id="qScrim" hidden>
   <form class="panel" id="qPanel" role="dialog" aria-modal="true" aria-labelledby="qTitle">
     <h2 id="qTitle">This week's quote</h2>
+    <div class="field">
+      <label class="label" for="qFind">Find a quote online</label>
+      <div class="qfind"><input id="qFind" type="search" autocomplete="off" maxlength="100" placeholder="A person or a topic: Rumi, Alan Watts, courage…"><button type="button" class="btn sm" id="qFindGo">Search</button></div>
+      <div class="hint" id="qFindStatus">Searches Wikiquote. Pick a result to fill in the quote below.</div>
+      <ol class="qresults" id="qResults" hidden></ol>
+    </div>
     <div class="field"><label class="label" for="qText">Quote</label><textarea id="qText" maxlength="400" placeholder="Leave blank to use this week's pick"></textarea></div>
     <div class="field"><label class="label" for="qBy">Who said it</label><input id="qBy" type="text" maxlength="120"></div>
     <div class="inline"><button type="button" class="btn sm" id="qAnother">Another pick</button><button type="button" class="btn sm" id="qAuto">Use this week's pick</button></div>
@@ -704,16 +720,55 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     $("qText").value = l.quote || ""; $("qBy").value = l.quote_by || ""; $("qErr").textContent = "";
     if (!l.quote) { const q = weeklyPick(0); if (q) $("qText").placeholder = "This week: " + q.text; }
     pickOffset = 1;
+    resetFind();
     $("qScrim").hidden = false;
-    setTimeout(() => $("qText").focus(), 0);
+    setTimeout(() => $("qFind").focus(), 0);
   }
-  function closeQuote() { $("qScrim").hidden = true; }
+  function closeQuote() { $("qScrim").hidden = true; if (findCtl) { findCtl.abort(); findCtl = null; } $("qFindGo").disabled = false; }
   async function saveQuote(text, by) {
     const fields = { quote: text.trim().slice(0, 400), quote_by: text.trim() ? by.trim().slice(0, 120) : "" };
     Object.assign(S.list, fields); drawQuote();
     const { error } = await S.sb.from("lists").update(fields).eq("id", S.listId);
     if (error) failed(error, "save the quote");
   }
+  // Search Wikiquote (web/quote-search.js) and fill the form from a pick.
+  let findCtl = null;
+  function resetFind() {
+    if (findCtl) findCtl.abort();
+    findCtl = null;
+    $("qFind").value = ""; $("qResults").hidden = true; $("qResults").replaceChildren();
+    $("qFindStatus").textContent = "Searches Wikiquote. Pick a result to fill in the quote below.";
+  }
+  async function findQuotes() {
+    const term = $("qFind").value.trim();
+    if (!term || !window.Kay2DoQuoteSearch) { $("qFind").focus(); return; }
+    if (findCtl) findCtl.abort();
+    const ctl = findCtl = new AbortController();
+    $("qFindStatus").textContent = "Searching Wikiquote for “" + term + "”…"; $("qFindGo").disabled = true;
+    try {
+      const found = await window.Kay2DoQuoteSearch.search(term, ctl.signal);
+      if (ctl !== findCtl) return;
+      const list = $("qResults");
+      list.replaceChildren(...found.map(q => {
+        const btn = h("button", { type: "button", "aria-pressed": "false", title: "Use this quote", onclick: () => {
+          $("qText").value = q.text; $("qBy").value = q.by;
+          list.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+          $("qFindStatus").replaceChildren("Filled in below. Edit it if you like, then press Save. ",
+            h("a", { href: window.Kay2DoQuoteSearch.pageUrl(q.page), target: "_blank", rel: "noopener", text: "See it on Wikiquote" }));
+        } }, h("span", { class: "qt", text: "“" + q.text + "”" }), h("span", { class: "qb", text: "— " + q.by }));
+        return h("li", null, btn);
+      }));
+      list.hidden = !found.length; list.scrollTop = 0;
+      $("qFindStatus").textContent = found.length
+        ? found.length + " quote" + (found.length === 1 ? "" : "s") + " from Wikiquote. Pick one to fill it in."
+        : "No quotes found for “" + term + "”. Try a person's full name or a single topic word.";
+    } catch (err) {
+      if (ctl !== findCtl || (err && err.name === "AbortError")) return;
+      $("qFindStatus").textContent = (err && err.message) || "The search didn't work. Check your connection and try again.";
+    } finally { if (ctl === findCtl) $("qFindGo").disabled = false; }
+  }
+  $("qFindGo").addEventListener("click", findQuotes);
+  $("qFind").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); findQuotes(); } });
   $("quoteEdit").addEventListener("click", openQuote);
   $("qAnother").addEventListener("click", () => {
     const current = $("qText").value.trim() || (weeklyPick(0) || {}).text;

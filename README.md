@@ -76,7 +76,9 @@ Sign in once (web or app) with your email. You'll land on "Create my list". To b
 
 ## Weekly quote
 
-Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to step through the picks or type their own, and can turn quotes off under List settings.
+Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to search for a quote online, step through the picks or type their own, and can turn quotes off under List settings.
+
+**Find a quote online** searches [Wikiquote](https://en.wikiquote.org) through Wikimedia's public API (no key, called straight from the page or the app). Type a person ("Rumi", "Alan Watts") or a topic ("courage"); picking a result fills in the quote and who said it, ready to edit and save. The code is `web/quote-search.js` for the web and `apple/Kay2Do/QuoteSearch.swift` for the app; keep the two alike. `tools/quote-search-test/` checks both on saved sample pages and with a few live searches, and runs on GitHub with the app build.
 
 The built-in quotes are all from public-domain texts or translations, so the app can be shared or sold. Writers still under copyright (Alan Watts, for example) aren't built in; type their words in as the week's quote. To edit the library, change `tools/quotes.py` and run `python3 tools/quotes.py`, which regenerates `web/quotes.js` and `apple/Kay2Do/Quotes.swift`.
 
@@ -113,6 +115,7 @@ You can assign a task to a typed name or email before someone has joined. It sho
 | `apple/Kay2Do/TaskListView.swift`, `TaskRow.swift` | The list |
 | `apple/Kay2Do/TaskEditor.swift` | Task detail sheet |
 | `apple/Kay2Do/SettingsView.swift` | Your name, text look, list name, categories, people |
+| `web/quote-search.js`, `apple/Kay2Do/QuoteSearch.swift` | Quote search on Wikiquote, for the web page and the app |
 | `apple/Kay2Do/TextAppearance.swift` | Font (system font picker), font size and font color for tasks, saved per device |
 | `.github/workflows/build.yml` | Compiles the Mac and iOS builds when `apple/` changes |
 | `.github/workflows/testflight.yml` | Archives, signs and uploads the iPhone app to TestFlight when `apple/` changes on `main` |

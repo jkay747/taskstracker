@@ -2,9 +2,9 @@ name: Mac and iPhone app
 
 on:
   push:
-    paths: ["apple/**", ".github/workflows/build.yml"]
+    paths: ["apple/**", "web/quote-search.js", "tools/quote-search-test/**", ".github/workflows/build.yml"]
   pull_request:
-    paths: ["apple/**", ".github/workflows/build.yml"]
+    paths: ["apple/**", "web/quote-search.js", "tools/quote-search-test/**", ".github/workflows/build.yml"]
   workflow_dispatch:
 
 jobs:
@@ -44,3 +44,16 @@ jobs:
         with:
           name: build-log-${{ matrix.name }}
           path: build.log
+
+  quote-search:
+    name: Quote search
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: App version (Swift)
+        run: |
+          swiftc apple/Kay2Do/QuoteSearch.swift tools/quote-search-test/main.swift -o "$RUNNER_TEMP/qst"
+          "$RUNNER_TEMP/qst" tools/quote-search-test
+      - name: Web version (JavaScript)
+        run: node tools/quote-search-test/test.js
