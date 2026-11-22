@@ -199,7 +199,8 @@ final class Store: ObservableObject {
         if list != fresh { list = fresh }
         if role != myRole { role = myRole }
         if categories != c { categories = c }
-        if tasks != t { tasks = t }
+        let shown = t.filter { !$0.isExpired(on: fresh) }
+        if tasks != shown { tasks = shown }
         if people != p { people = p }
         if let index = lists.firstIndex(where: { $0.id == row.id }), lists[index].name != row.name {
             lists[index].name = row.name
@@ -278,7 +279,12 @@ final class Store: ObservableObject {
             notice = error.message
             return
         }
-        errorMessage = "Couldn't \(action). \(error.localizedDescription)"
+        let detail = error.localizedDescription
+        if detail.contains("completed_mode") || detail.contains("completed_days") {
+            errorMessage = "Couldn't \(action). Your database needs a one-time update for this setting: run supabase/update-2026-11-completed-tasks.sql in Supabase's SQL Editor."
+            return
+        }
+        errorMessage = "Couldn't \(action). \(detail)"
     }
 
     func clearNotice() { notice = nil }
@@ -341,6 +347,35 @@ final class Store: ObservableObject {
         list = current
         let id = current.id
         write("save the quote setting") { try await $0.update("lists", fields: ["show_quote": show], where: [("id", "eq." + id)]) }
+    }
+
+    // MARK: Completed tasks
+
+    var completedCount: Int { tasks.filter(\.done).count }
+
+    /// Keep checked-off tasks until removed by hand ("manual"), or remove them `days`
+    /// after they're checked off ("auto"). Saved on the list, for everyone.
+    func setCompletedRemoval(mode: String, days: Int) {
+        guard isManager, var current = list else { return }
+        let days = min(max(days, 1), 365)
+        guard current.completedMode != mode || current.completedDays != days else { return }
+        current.completedMode = mode
+        current.completedDays = days
+        list = current
+        tasks.removeAll { $0.isExpired(on: current) }
+        let id = current.id
+        write("save the completed-tasks setting") {
+            try await $0.update("lists", fields: ["completed_mode": mode, "completed_days": days], where: [("id", "eq." + id)])
+        }
+    }
+
+    /// Removes every checked-off task on the list, for everyone.
+    func removeCompleted() {
+        guard isManager, let id = listID, completedCount > 0 else { return }
+        tasks.removeAll(where: \.done)
+        write("remove the completed tasks") {
+            try await $0.delete("tasks", where: [("list_id", "eq." + id), ("done", "eq.true")])
+        }
     }
 
     // MARK: Background picture (Mac and web)

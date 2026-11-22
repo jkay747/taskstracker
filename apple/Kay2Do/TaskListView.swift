@@ -27,7 +27,7 @@ struct TaskListView: View {
     let filter: SidebarItem
 
     @EnvironmentObject private var store: Store
-    @AppStorage("showDone") private var showDone = false
+    @State private var confirmingClear = false
     @State private var search = ""
     @State private var ownerFilter = OwnerFilter.everyone
     @State private var editing: EditTarget?
@@ -62,13 +62,26 @@ struct TaskListView: View {
                                 Text(store.name(of: person)).tag(OwnerFilter.person(person.key))
                             }
                         }
-                        Toggle("Show Completed", isOn: $showDone)
+                        if store.isManager {
+                            Divider()
+                            Button(role: .destructive) {
+                                confirmingClear = true
+                            } label: {
+                                Label("Remove Completed (\(store.completedCount))", systemImage: "checkmark.circle.badge.xmark")
+                            }
+                            .disabled(store.completedCount == 0)
+                        }
                     } label: {
                         Label("Filter", systemImage: ownerFilter == .everyone
                               ? "line.3.horizontal.decrease.circle"
                               : "line.3.horizontal.decrease.circle.fill")
                     }
                 }
+            }
+            .confirmationDialog("Remove \(store.completedCount) completed task\(store.completedCount == 1 ? "" : "s") for everyone on the list?",
+                                isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Remove Completed", role: .destructive) { store.removeCompleted() }
+                Button("Keep", role: .cancel) {}
             }
             .sheet(item: $editing) { target in
                 TaskEditor(original: target.task, isNew: target.isNew) {
@@ -115,16 +128,12 @@ struct TaskListView: View {
     private func bucketSection(_ bucket: Bucket) -> some View {
         let all = allTasks(in: bucket)
         return Section {
-            ForEach(openTasks(in: bucket)) { task in
+            // Checked-off tasks stay where they are, crossed out, until they're removed.
+            ForEach(tasks(in: bucket)) { task in
                 row(task, showCategory: false)
             }
             if let category = bucket.category {
                 AddTaskField(category: category, owner: defaultOwner)
-            }
-            if showDone {
-                ForEach(doneTasks(in: bucket)) { task in
-                    row(task, showCategory: false)
-                }
             }
         } header: {
             BucketHeader(label: bucket.label, colorIndex: bucket.colorIndex,
@@ -193,16 +202,12 @@ struct TaskListView: View {
         return store.tasks.filter { !keys.contains($0.categoryKey ?? "") }
     }
 
-    private func openTasks(in bucket: Bucket) -> [TaskItem] {
-        allTasks(in: bucket).filter { !$0.done && matches($0) }.sorted(by: TaskItem.order)
-    }
-
-    private func doneTasks(in bucket: Bucket) -> [TaskItem] {
-        allTasks(in: bucket).filter { $0.done && matches($0) }.sorted(by: TaskItem.order)
+    private func tasks(in bucket: Bucket) -> [TaskItem] {
+        allTasks(in: bucket).filter(matches).sorted(by: TaskItem.order)
     }
 
     private var starred: [TaskItem] {
-        store.tasks.filter { !$0.done && $0.priority && matches($0) }.sorted(by: TaskItem.order)
+        store.tasks.filter { $0.priority && matches($0) }.sorted(by: TaskItem.order)
     }
 
     /// Everyone on the list or named on a task, other than you, for the filter menu.

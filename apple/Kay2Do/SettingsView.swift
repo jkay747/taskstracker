@@ -17,6 +17,9 @@ struct SettingsView: View {
     @State private var fontName = ""
     @State private var fontSize: Double = 0
     @State private var fontColor = ""
+    @State private var removeCompletedAutomatically = false
+    @State private var completedDays = 7
+    @State private var confirmingClear = false
     @AppStorage(TextAppearance.fontKey) private var savedFontName = ""
     @AppStorage(TextAppearance.sizeKey) private var savedFontSize: Double = 0
     @AppStorage(TextAppearance.colorKey) private var savedFontColor = ""
@@ -41,6 +44,7 @@ struct SettingsView: View {
                         TextField("List name", text: $listName)
                         Toggle("Show a weekly quote", isOn: $showQuote)
                     }
+                    completedSection
                     categoriesSection
                     #if os(macOS)
                     BackgroundSettings(value: $background, style: $backgroundStyle, uploaded: $uploadedBackgrounds)
@@ -91,6 +95,7 @@ struct SettingsView: View {
                         if store.isManager {
                             store.applySettings(listName: listName, drafts: drafts)
                             store.setShowQuote(showQuote)
+                            store.setCompletedRemoval(mode: removeCompletedAutomatically ? "auto" : "manual", days: completedDays)
                             #if os(macOS)
                             store.setBackground(background, style: backgroundStyle)
                             #endif
@@ -120,6 +125,8 @@ struct SettingsView: View {
             myName = store.myName
             listName = store.listName
             showQuote = store.list?.showQuote ?? true
+            removeCompletedAutomatically = store.list?.removesCompletedAutomatically ?? false
+            completedDays = store.list?.completedDays ?? 7
             background = store.list?.background ?? ""
             backgroundStyle = store.backgroundStyle
             drafts = store.categoryDrafts()
@@ -130,6 +137,58 @@ struct SettingsView: View {
         #if os(macOS)
         .frame(minWidth: 520, minHeight: 600)
         #endif
+    }
+
+    /// Completed tasks: keep them, crossed out, until removed by hand, or remove them
+    /// automatically a number of days after they're checked off.
+    private var completedSection: some View {
+        Section {
+            Picker("When a task is checked off", selection: $removeCompletedAutomatically) {
+                Text("Keep it, crossed out, until I remove it").tag(false)
+                Text("Remove it automatically").tag(true)
+            }
+            #if os(iOS)
+            .pickerStyle(.inline)
+            .labelsHidden()
+            #else
+            .pickerStyle(.radioGroup)
+            #endif
+            if removeCompletedAutomatically {
+                LabeledContent("Remove after") {
+                    HStack(spacing: 6) {
+                        TextField("Days", value: $completedDays, format: .number)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 56)
+                            #if os(iOS)
+                            .keyboardType(.numberPad)
+                            #endif
+                            .onChange(of: completedDays) { _, value in
+                                let fixed = min(max(value, 1), 365)
+                                if fixed != value { completedDays = fixed }
+                            }
+                        Stepper("Days", value: $completedDays, in: 1...365).labelsHidden()
+                        Text(completedDays == 1 ? "day" : "days").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Button(role: .destructive) {
+                confirmingClear = true
+            } label: {
+                Text(store.completedCount == 0
+                     ? "No Completed Tasks to Remove"
+                     : "Remove \(store.completedCount) Completed Task\(store.completedCount == 1 ? "" : "s") Now")
+            }
+            .disabled(store.completedCount == 0)
+            .confirmationDialog("Remove \(store.completedCount) completed task\(store.completedCount == 1 ? "" : "s") for everyone on the list?",
+                                isPresented: $confirmingClear, titleVisibility: .visible) {
+                Button("Remove Completed", role: .destructive) { store.removeCompleted() }
+                Button("Keep", role: .cancel) {}
+            }
+        } header: {
+            Text("Completed Tasks")
+        } footer: {
+            Text("Checked-off tasks stay on the list, crossed out. With automatic removal they go that many days after they're checked off, for everyone on the list. Changes apply when you tap Save; Remove Now happens right away.")
+        }
     }
 
     private var categoriesSection: some View {

@@ -141,7 +141,11 @@ body.bg-vivid { --sheet-mix: 70%; }
 .add input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; }
 .add input::placeholder { color: var(--muted); }
 .emptycol { padding: 14px 2px; color: var(--muted); font-size: 13px; border-bottom: 1px dotted var(--muted); }
-.donehdr { margin-top: 14px; padding: 6px 2px; }
+fieldset.donemode { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.donemode legend { padding: 0; margin-bottom: 2px; color: var(--muted); }
+.daysrow { padding-left: 26px; font-size: 14px; }
+.daysrow input { width: 72px; border: 1px solid var(--rule); background: var(--paper); padding: 6px 8px; }
+.daysrow input:disabled, .daysrow input:disabled + span, .daysrow label { color: var(--muted); }
 
 .scrim { position: fixed; inset: 0; background: rgba(10, 11, 15, .45); display: grid; place-items: center; padding: 16px; z-index: 10; }
 .panel { width: min(580px, 100%); max-height: calc(100% - 16px); overflow: auto; background: var(--sheet); border: 1.5px solid var(--ink); border-top: 6px solid var(--cat, var(--ink)); padding: 20px 22px; display: grid; gap: 14px; }
@@ -277,7 +281,8 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       <label for="ownerFilter" class="muted">Owner</label>
       <select id="ownerFilter"></select>
       <input id="q" type="search" placeholder="Search tasks" aria-label="Search tasks">
-      <label class="chk"><input id="showDone" type="checkbox"> Show completed</label>
+      <button type="button" class="btn sm" id="clearDone" hidden>Remove completed</button>
+      <span class="confirm" id="clearConfirm" hidden></span>
       <button type="button" class="btn sm" id="printBtn">Save as PDF</button>
     </div>
   </div>
@@ -349,6 +354,14 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     <div id="managerSettings">
       <div class="field"><label class="label" for="sName">List name</label><input id="sName" type="text" maxlength="60"></div>
       <label class="chk2"><input id="sShowQuote" type="checkbox"> Show a weekly quote</label>
+      <fieldset class="field donemode" style="margin-top:14px">
+        <legend class="label">Completed tasks</legend>
+        <label class="chk2"><input type="radio" name="sDoneMode" id="sDoneManual" value="manual"> Keep them, crossed out, until I remove them</label>
+        <label class="chk2"><input type="radio" name="sDoneMode" id="sDoneAuto" value="auto"> Remove them automatically</label>
+        <div class="inline daysrow"><label for="sDoneDays">after</label><input id="sDoneDays" type="number" min="1" max="365" step="1" inputmode="numeric"><span>days</span></div>
+        <div class="inline"><button type="button" class="btn sm" id="sClearDone">Remove completed tasks now</button><span class="confirm" id="sClearConfirm" hidden></span></div>
+        <div class="hint">Checked-off tasks stay on the list, crossed out. With automatic removal they go that many days after they're checked off, for everyone on the list.</div>
+      </fieldset>
       <div class="field" style="margin-top:14px">
         <span class="label">Categories</span>
         <div class="catlist" id="catList"></div>
@@ -400,7 +413,7 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     sb: null, meId: null, meEmail: "", meName: "",
     lists: [], roles: {}, listId: null, list: null, role: null,
     cats: [], tasks: new Map(), people: [],
-    view: "all", ownerFilter: "all", q: "", showDone: LS.get("showDone") === "1"
+    view: "all", ownerFilter: "all", q: ""
   };
   const isManager = () => S.role === "owner" || S.role === "editor";
 
@@ -462,8 +475,6 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       owner: null, shared: [], createdBy: S.meId, createdAt: Date.now(), doneAt: null, doneBy: null }, patch || {});
   }
   function sortTasks(a, b) {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    if (a.done && b.done) return (b.doneAt || 0) - (a.doneAt || 0);
     if (a.priority !== b.priority) return a.priority ? -1 : 1;
     if (a.due !== b.due) { if (!a.due) return 1; if (!b.due) return -1; return a.due < b.due ? -1 : 1; }
     return a.createdAt - b.createdAt;
@@ -876,8 +887,14 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   }
 
   // ---------- filters ----------
+  // On lists set to remove completed tasks automatically, ones past their days are
+  // hidden at once; the database's hourly job (supabase/schema.sql) deletes them.
+  function expired(t) {
+    if (!t.done || !S.list || S.list.completed_mode !== "auto") return false;
+    const days = Number(S.list.completed_days) || 7;
+    return !!t.doneAt && t.doneAt < Date.now() - days * 86400000;
+  }
   function matches(t) {
-    if (!S.showDone && t.done) return false;
     if (S.q) { const q = S.q.toLowerCase(); if (!(t.title.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q))) return false; }
     const f = S.ownerFilter;
     if (f === "mine") { if (!involvesMe(t)) return false; }
@@ -888,8 +905,8 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
 
   // ---------- render ----------
   function render() {
-    const all = [...S.tasks.values()];
-    drawViewSel(all); drawOwnerFilter(all); drawSummary(all); drawBoard(all);
+    const all = [...S.tasks.values()].filter(t => !expired(t));
+    drawViewSel(all); drawOwnerFilter(all); drawSummary(all); drawBoard(all); drawClearDone(all);
     ["themeText", "themeWhy", "weekOf"].forEach(id => $(id).disabled = !isManager());
   }
   function boardCats(all) {
@@ -992,12 +1009,11 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
       const openN = inCat.filter(t => !t.done).length, doneN = inCat.length - openN;
       const col = h("section", { class: "col", style: "--cat:" + colorVar(c.color), "aria-label": c.label },
         h("div", { class: "colhead" }, h("h3", { text: c.label }), h("span", { class: "count", text: openN + " open" + (doneN ? " · " + doneN + " done" : "") })));
-      const open = list.filter(t => !t.done), done = list.filter(t => t.done);
-      open.forEach(t => col.append(taskRow(t)));
+      // Checked-off tasks stay where they are, crossed out, until they're removed.
+      list.forEach(t => col.append(taskRow(t)));
       const add = addRow(c); if (add) col.append(add);
-      if (!open.length && (S.q || S.ownerFilter !== "all") && inCat.some(t => !t.done)) col.append(h("div", { class: "emptycol", text: "No open tasks match these filters." }));
-      else if (!open.length && !add) col.append(h("div", { class: "emptycol", text: "Nothing open here." }));
-      if (done.length) { col.append(h("div", { class: "label muted donehdr", text: "Completed" })); done.forEach(t => col.append(taskRow(t))); }
+      if (!list.length && (S.q || S.ownerFilter !== "all") && inCat.length) col.append(h("div", { class: "emptycol", text: "No tasks match these filters." }));
+      else if (!list.length && !add) col.append(h("div", { class: "emptycol", text: "Nothing here." }));
       board.append(col);
     });
   }
@@ -1142,6 +1158,10 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     $("sMyName").value = S.meName;
     $("sName").value = (S.list && S.list.name) || "";
     $("sShowQuote").checked = !S.list || S.list.show_quote !== false;
+    const auto = !!S.list && S.list.completed_mode === "auto";
+    $("sDoneManual").checked = !auto; $("sDoneAuto").checked = auto;
+    $("sDoneDays").value = (S.list && S.list.completed_days) || 7;
+    syncDoneMode(); drawSettingsClearDone();
     $("managerSettings").hidden = !isManager();
     $("inviteForm").hidden = S.role !== "owner";
     $("leaveList").hidden = S.role === "owner";
@@ -1153,6 +1173,15 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
     $("setScrim").hidden = false;
     setTimeout(() => $("sMyName").focus(), 0);
   }
+  function syncDoneMode() { $("sDoneDays").disabled = !$("sDoneAuto").checked; }
+  function drawSettingsClearDone() {
+    const n = doneCount();
+    $("sClearDone").disabled = !n;
+    $("sClearDone").textContent = n ? "Remove " + n + " completed task" + (n === 1 ? "" : "s") + " now" : "No completed tasks to remove";
+    $("sClearDone").hidden = false; $("sClearConfirm").hidden = true;
+  }
+  ["sDoneManual", "sDoneAuto"].forEach(id => $(id).addEventListener("change", () => { syncDoneMode(); if ($("sDoneAuto").checked) $("sDoneDays").focus(); }));
+  $("sClearDone").addEventListener("click", () => { $("sClearDone").hidden = true; askClearDone($("sClearConfirm"), drawSettingsClearDone); });
   function closeSettings() { $("setScrim").hidden = true; catDraft = null; bgDraft = null; discardUnusedUploads(); }
   function drawCatList() {
     const list = $("catList"); list.replaceChildren();
@@ -1270,6 +1299,20 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
         S.list.background = bgValue; S.list.background_style = bgStyle;
         if (oldBg.startsWith("upload:") && oldBg !== bgValue) S.sb.storage.from("backgrounds").remove([oldBg.slice(7)]).catch(() => {});
       }
+      const doneMode = $("sDoneAuto").checked ? "auto" : "manual";
+      let doneDays = Math.round(Number($("sDoneDays").value));
+      if (doneMode === "auto" && !(doneDays >= 1 && doneDays <= 365)) { $("setErr").textContent = "Pick between 1 and 365 days for removing completed tasks."; $("sDoneDays").focus(); return; }
+      if (!(doneDays >= 1 && doneDays <= 365)) doneDays = S.list.completed_days || 7;
+      if (doneMode !== (S.list.completed_mode || "manual") || doneDays !== (S.list.completed_days || 7)) {
+        const { error } = await S.sb.from("lists").update({ completed_mode: doneMode, completed_days: doneDays }).eq("id", S.listId);
+        if (error) {
+          $("setErr").textContent = /completed_(mode|days)/.test(error.message || "")
+            ? "This list's database needs a one-time update for this setting: run supabase/update-2026-11-completed-tasks.sql in Supabase's SQL Editor."
+            : error.message;
+          return;
+        }
+        S.list.completed_mode = doneMode; S.list.completed_days = doneDays;
+      }
       const showQuote = $("sShowQuote").checked;
       if (name !== S.list.name || showQuote !== (S.list.show_quote !== false)) {
         ops.push(S.sb.from("lists").update({ name, show_quote: showQuote }).eq("id", S.listId));
@@ -1307,8 +1350,31 @@ textarea.copybox { width: 100%; min-height: 96px; border: 1px solid var(--rule);
   // ---------- toolbar ----------
   $("ownerFilter").addEventListener("change", e => { S.ownerFilter = e.target.value; render(); });
   $("q").addEventListener("input", e => { S.q = e.target.value.trim(); render(); });
-  $("showDone").checked = S.showDone;
-  $("showDone").addEventListener("change", e => { S.showDone = e.target.checked; LS.set("showDone", S.showDone ? "1" : "0"); render(); });
+  // ---------- removing completed tasks ----------
+  // Owners and editors can remove every checked-off task on the list at once.
+  function doneCount() { return [...S.tasks.values()].filter(t => t.done && !expired(t)).length; }
+  function drawClearDone(all) {
+    const n = all.filter(t => t.done).length;
+    const btn = $("clearDone");
+    btn.hidden = !isManager() || !n || !$("clearConfirm").hidden;
+    btn.textContent = "Remove completed (" + n + ")";
+    if (!n) $("clearConfirm").hidden = true;
+  }
+  function askClearDone(box, onDone) {
+    const n = doneCount();
+    if (!n) return;
+    box.replaceChildren("Remove " + n + " completed task" + (n === 1 ? "" : "s") + " for everyone? ",
+      h("button", { type: "button", class: "btn danger sm", text: "Remove", onclick: async () => {
+        box.hidden = true;
+        const { error } = await S.sb.from("tasks").delete().eq("list_id", S.listId).eq("done", true);
+        if (error) { failed(error, "remove completed tasks"); onDone && onDone(); return; }
+        [...S.tasks.values()].filter(t => t.done).forEach(t => S.tasks.delete(t.id));
+        render(); onDone && onDone();
+      } }),
+      h("button", { type: "button", class: "btn sm", text: "Keep", onclick: () => { box.hidden = true; onDone && onDone(); } }));
+    box.hidden = false;
+  }
+  $("clearDone").addEventListener("click", () => { $("clearDone").hidden = true; askClearDone($("clearConfirm"), render); });
   $("printBtn").addEventListener("click", () => window.print());
   ["weekOf", "themeText", "themeWhy"].forEach(id => $(id).addEventListener("change", saveWeek));
   ["themeText", "themeWhy"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); }));

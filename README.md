@@ -74,6 +74,15 @@ Build numbers come from the workflow's run number (101, 102, …), so each uploa
 
 Sign in once (web or app) with your email. You'll land on "Create my list". To bring over the tasks from the old Claude-hosted "Jason Kay To Dos" page instead, run the one-time import SQL in the SQL Editor, then reload.
 
+## Completed tasks
+
+Checking a task off crosses it out where it is, on the web, in the app and on the Mac desktop view; it doesn't move or disappear. Owners and editors choose under **List settings → Completed tasks** what happens next, for everyone on the list:
+
+- **Keep them, crossed out, until I remove them** (the default). **Remove completed** in the toolbar (web) or the filter menu (app) clears them all at once.
+- **Remove them automatically after N days** (1–365), counted from when each was checked off. The apps hide them as soon as they're due, and a database job (`remove_expired_completed`, run hourly by pg_cron) deletes them, even when no app is open.
+
+Setting this up on an existing project takes one step: run `supabase/update-2026-11-completed-tasks.sql` in Supabase's SQL Editor. It adds the two list columns and schedules the hourly job. If pg_cron isn't on, it says so; turn it on under **Database → Extensions** and run the file again. `supabase/schema.sql` includes the same parts for new projects.
+
 ## Weekly quote
 
 Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to search for a quote online, step through the picks or type their own, and can turn quotes off under List settings.

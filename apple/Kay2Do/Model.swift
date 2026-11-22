@@ -60,6 +60,12 @@ struct TaskList: Codable, Identifiable, Equatable {
     var background: String
     /// "subtle", "balanced" or "vivid": how strongly the picture shows through.
     var backgroundStyle: String
+    /// "manual": checked-off tasks stay, crossed out, until removed by hand.
+    /// "auto": they're removed `completedDays` days after they were checked off.
+    var completedMode: String
+    var completedDays: Int
+
+    var removesCompletedAutomatically: Bool { completedMode == "auto" }
 
     enum CodingKeys: String, CodingKey {
         case id, name, theme, because, quote, background
@@ -67,6 +73,8 @@ struct TaskList: Codable, Identifiable, Equatable {
         case quoteBy = "quote_by"
         case showQuote = "show_quote"
         case backgroundStyle = "background_style"
+        case completedMode = "completed_mode"
+        case completedDays = "completed_days"
     }
 
     init(from decoder: Decoder) throws {
@@ -81,6 +89,8 @@ struct TaskList: Codable, Identifiable, Equatable {
         showQuote = try c.decodeIfPresent(Bool.self, forKey: .showQuote) ?? true
         background = try c.decodeIfPresent(String.self, forKey: .background) ?? ""
         backgroundStyle = try c.decodeIfPresent(String.self, forKey: .backgroundStyle) ?? "balanced"
+        completedMode = try c.decodeIfPresent(String.self, forKey: .completedMode) ?? "manual"
+        completedDays = try c.decodeIfPresent(Int.self, forKey: .completedDays) ?? 7
     }
 }
 
@@ -260,6 +270,14 @@ struct TaskItem: Codable, Identifiable, Equatable {
     var dueDate: Date? { DayString.date(due) }
     var created: Date { Timestamp.parse(createdAt) ?? .distantPast }
     var completed: Date? { Timestamp.parse(doneAt) }
+
+    /// On a list that removes completed tasks automatically, true once this one has been
+    /// done for the list's number of days. The database's hourly job deletes it; the app
+    /// hides it as soon as it's due.
+    func isExpired(on list: TaskList?, now: Date = Date()) -> Bool {
+        guard done, let list, list.removesCompletedAutomatically, let completed else { return false }
+        return completed < now.addingTimeInterval(-Double(max(1, list.completedDays)) * 86_400)
+    }
     var people: [Person] { (owner.map { [$0] } ?? []) + shared }
 
     var isLate: Bool {
@@ -277,10 +295,9 @@ struct TaskItem: Codable, Identifiable, Equatable {
         doneBy = value ? userID : nil
     }
 
-    /// Open before done; starred first; then soonest due date; then oldest.
+    /// Starred first; then soonest due date; then oldest. Done or not doesn't move a
+    /// task: a checked-off one stays where it was, crossed out.
     static func order(_ a: TaskItem, _ b: TaskItem) -> Bool {
-        if a.done != b.done { return !a.done }
-        if a.done { return (a.completed ?? .distantPast) > (b.completed ?? .distantPast) }
         if a.priority != b.priority { return a.priority }
         if a.due != b.due {
             guard let x = a.due else { return false }

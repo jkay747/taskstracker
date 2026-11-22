@@ -2,7 +2,8 @@
 import SwiftUI
 
 /// What's drawn on the desktop: the list name and weekly theme, top
-/// priorities, then each category's open tasks. Completed tasks drop off.
+/// priorities, then each category's tasks. Checked-off tasks stay, crossed out,
+/// until they're removed (by hand, or automatically: List settings).
 struct WallpaperView: View {
     let fillsScreen: Bool
 
@@ -143,7 +144,7 @@ struct WallpaperView: View {
     // MARK: Data
 
     private func included(_ task: TaskItem) -> Bool {
-        !task.done && (!wall.mineOnly || task.involves(store.me))
+        !wall.mineOnly || task.involves(store.me)
     }
 
     private var starred: [TaskItem] {
@@ -183,17 +184,19 @@ private struct WallTaskRow: View {
             Button {
                 store.toggleDone(task)
             } label: {
-                Image(systemName: "square")
+                Image(systemName: task.done ? "checkmark.square.fill" : "square")
                     .font(.system(size: 13 * scale))
+                    .foregroundStyle(task.done ? Color.secondary : Color.primary)
             }
             .buttonStyle(.plain)
             .disabled(!editable)
-            .help(editable ? "Mark done" : "")
+            .help(editable ? (task.done ? "Mark not done" : "Mark done") : "")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title)
                     .font(TextAppearance.font(name: fontName, size: fontSize, scale: Double(14 * scale) / TextAppearance.defaultSize))
-                    .foregroundStyle(TextAppearance.color(fontColor) ?? Color.primary)
+                    .strikethrough(task.done)
+                    .foregroundStyle(task.done ? Color.secondary : (TextAppearance.color(fontColor) ?? Color.primary))
                     .lineLimit(2)
                 if !meta.isEmpty {
                     Text(meta)
