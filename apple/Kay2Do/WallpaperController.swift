@@ -23,6 +23,9 @@ final class WallpaperController: ObservableObject {
         }
     }
 
+    /// All displays (including ones connected later), or only the ones picked.
+    enum DisplayMode: String { case all, chosen }
+
     enum TextSize: String, CaseIterable, Identifiable {
         case small, medium, large
         var id: String { rawValue }
@@ -42,7 +45,10 @@ final class WallpaperController: ObservableObject {
     /// Clickable: sits above the desktop icons so its checkboxes work.
     /// Otherwise it sits below the icons and ignores the mouse entirely.
     @Published var clickable: Bool { didSet { save(); rebuild() } }
-    @Published var allScreens: Bool { didSet { save(); rebuild() } }
+    @Published var displayMode: DisplayMode { didSet { save(); rebuild() } }
+    /// The displays picked when `displayMode` is `.chosen`, by DisplayInfo.id. Ones that
+    /// aren't connected now are kept, so the list comes back when they are.
+    @Published var chosenDisplays: Set<String> { didSet { save(); rebuild() } }
     @Published var mineOnly: Bool { didSet { save() } }
     /// Fills the screen with the list's background picture, behind the desktop icons.
     @Published var usePhoto: Bool { didSet { save(); rebuild() } }
@@ -58,7 +64,12 @@ final class WallpaperController: ObservableObject {
         position = Position(rawValue: d.string(forKey: "wallpaper.position") ?? "") ?? .right
         textSize = TextSize(rawValue: d.string(forKey: "wallpaper.textSize") ?? "") ?? .medium
         clickable = d.object(forKey: "wallpaper.clickable") as? Bool ?? true
-        allScreens = d.bool(forKey: "wallpaper.allScreens")
+        // Before displays could be picked one by one, there was just "all" or "main".
+        displayMode = DisplayMode(rawValue: d.string(forKey: "wallpaper.displayMode") ?? "")
+            ?? (d.bool(forKey: "wallpaper.allScreens") ? .all : .chosen)
+        var chosen = Set(d.stringArray(forKey: "wallpaper.displays") ?? [])
+        if chosen.isEmpty, let main = NSScreen.screens.first { chosen = [DisplayInfo.id(of: main)] }
+        chosenDisplays = chosen
         mineOnly = d.bool(forKey: "wallpaper.mineOnly")
         usePhoto = d.bool(forKey: "wallpaper.usePhoto")
         screenObserver = NotificationCenter.default.addObserver(
@@ -81,9 +92,44 @@ final class WallpaperController: ObservableObject {
         d.set(position.rawValue, forKey: "wallpaper.position")
         d.set(textSize.rawValue, forKey: "wallpaper.textSize")
         d.set(clickable, forKey: "wallpaper.clickable")
-        d.set(allScreens, forKey: "wallpaper.allScreens")
+        d.set(displayMode.rawValue, forKey: "wallpaper.displayMode")
+        d.set(chosenDisplays.sorted(), forKey: "wallpaper.displays")
         d.set(mineOnly, forKey: "wallpaper.mineOnly")
         d.set(usePhoto, forKey: "wallpaper.usePhoto")
+    }
+
+    // MARK: Displays
+
+    func shows(on display: String) -> Bool { displayMode == .all || chosenDisplays.contains(display) }
+
+    func showOnAllDisplays() { displayMode = .all }
+
+    func showOnlyOn(_ displays: Set<String>) {
+        guard !displays.isEmpty else { return }
+        chosenDisplays = displays
+        displayMode = .chosen
+    }
+
+    /// Puts the list on a display, or takes it off. At least one connected display keeps it.
+    func toggleDisplay(_ display: String, among connected: [String]) {
+        if displayMode == .all {
+            let rest = Set(connected).subtracting([display])
+            guard !rest.isEmpty else { return }
+            showOnlyOn(rest)
+        } else if chosenDisplays.contains(display) {
+            guard !chosenDisplays.subtracting([display]).intersection(connected).isEmpty else { return }
+            chosenDisplays.remove(display)
+        } else {
+            chosenDisplays.insert(display)
+        }
+    }
+
+    /// The screens the list goes on now. If none of the picked ones is connected, the main one.
+    var screens: [NSScreen] {
+        let all = NSScreen.screens
+        guard displayMode == .chosen else { return all }
+        let picked = all.filter { chosenDisplays.contains(DisplayInfo.id(of: $0)) }
+        return picked.isEmpty ? Array(all.prefix(1)) : picked
     }
 
     private func rebuild() {
@@ -95,7 +141,7 @@ final class WallpaperController: ObservableObject {
         guard isOn else { return }
         if store.phase == .ready { store.startPolling() }
 
-        let screens = allScreens ? NSScreen.screens : [NSScreen.main ?? NSScreen.screens.first].compactMap { $0 }
+        let screens = self.screens
         if usePhoto {
             // The picture goes in its own window at the desktop-picture level, under the
             // icons and under the list, and never takes clicks.
@@ -203,6 +249,7 @@ final class DesktopHostingView: NSHostingView<AnyView> {
 /// The "Desktop" menu: in the menu bar and in the list's toolbar menu.
 struct WallpaperMenu: View {
     @ObservedObject private var wall = WallpaperController.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Toggle("Show List on Desktop", isOn: $wall.isOn)
@@ -215,8 +262,25 @@ struct WallpaperMenu: View {
         }
         Toggle("Only My Tasks", isOn: $wall.mineOnly)
         Toggle("Check Off from the Desktop", isOn: $wall.clickable)
-        Toggle("Show on All Displays", isOn: $wall.allScreens)
+        Menu("Displays") {
+            Toggle("All Displays", isOn: Binding(
+                get: { wall.displayMode == .all },
+                set: { if $0 { wall.showOnAllDisplays() } }
+            ))
+            Divider()
+            let displays = DisplayInfo.all()
+            ForEach(displays) { display in
+                Toggle(display.name + (display.isMain ? " (Main)" : ""), isOn: Binding(
+                    get: { wall.shows(on: display.id) },
+                    set: { _ in wall.toggleDisplay(display.id, among: displays.map(\.id)) }
+                ))
+            }
+        }
         Toggle("Use the List's Picture as the Desktop Picture", isOn: $wall.usePhoto)
+        Button("Desktop Settings…") {
+            openWindow(id: DesktopSettingsView.windowID)
+            NSApp.activate()
+        }
         Divider()
         Toggle("Open Kay2-Do at Login", isOn: Binding(
             get: { wall.opensAtLogin },

@@ -99,6 +99,8 @@ Uploads are shrunk to at most 3840 pixels on the long side and stored in the pri
 
 In the Mac app's **Desktop** menu, **Use the List's Picture as the Desktop Picture** fills the screen with it behind the desktop list.
 
+**Desktop Settings…** (Desktop menu) shows a picture of your displays, arranged as in System Settings → Displays: click one to put the desktop list on it or take it off, or choose **All Displays** (which includes any you connect later). The choice is remembered per display, so the list comes back when an unplugged display returns. The same window frames the desktop picture: Kay2-Do uses Apple's Vision framework, on the Mac, to find faces or else the main subject and centers the picture on them; drag the preview to pan, and pinch, scroll or use the slider to zoom (up to 4×). **Auto-Frame** goes back to the automatic guess. Framing is kept on each Mac (`PhotoFraming.swift`); the displays and picker are in `DesktopDisplays.swift`.
+
 To change the built-in pictures, edit `tools/backgrounds.py` and run `python3 tools/backgrounds.py`, which regenerates `web/backgrounds.js` and `apple/Kay2Do/Backgrounds.swift`. Use only public-domain files, and only Wikimedia's standard thumbnail widths (500, 1920, 3840).
 
 ## Sharing a list

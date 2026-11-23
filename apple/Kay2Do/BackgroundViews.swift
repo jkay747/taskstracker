@@ -225,11 +225,16 @@ enum PhotoShrinker {
 struct DesktopPhotoView: View {
     @EnvironmentObject private var store: Store
     @ObservedObject private var images = BackgroundImages.shared
+    @ObservedObject private var framing = PhotoFraming.shared
 
     var body: some View {
         let choice = store.background
         if choice != .none, let image = images.image(for: choice.value, store: store) {
-            FillImage(image: image).ignoresSafeArea()
+            // Framed around its subject (found automatically), or as framed by hand in Desktop Settings.
+            FramedImage(image: image, framing: framing.framing(for: choice.value))
+                .ignoresSafeArea()
+                .id(choice.value)
+                .onAppear { framing.autoFrameIfNeeded(image, for: choice.value) }
         } else {
             Color.clear
         }

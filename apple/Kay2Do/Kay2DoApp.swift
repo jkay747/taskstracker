@@ -26,5 +26,12 @@ struct Kay2DoApp: App {
             }
             #endif
         }
+        #if os(macOS)
+        Window("Desktop Settings", id: DesktopSettingsView.windowID) {
+            DesktopSettingsView()
+                .environmentObject(store)
+        }
+        .windowResizability(.contentMinSize)
+        #endif
     }
 }
