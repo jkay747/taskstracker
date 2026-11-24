@@ -83,6 +83,14 @@ Checking a task off crosses it out where it is, on the web, in the app and on th
 
 Setting this up on an existing project takes one step: run `supabase/update-2026-11-completed-tasks.sql` in Supabase's SQL Editor. It adds the two list columns and schedules the hourly job. If pg_cron isn't on, it says so; turn it on under **Database → Extensions** and run the file again. `supabase/schema.sql` includes the same parts for new projects.
 
+## Snoozing tasks
+
+Anyone who can change a task can snooze it for a number of days (5 unless you pick another, 1–365). On the web, press **Zz** on the task or use **Snooze** in the task editor; in the app, use **Snooze…** in the task's menu (right-click on the Mac, long-press or swipe on the iPhone) or the editor.
+
+A snoozed task stays where it is but fades to a faint grey, with "Snoozed until …" under it, for everyone on the list. It wakes at 9 AM on the last day. Then the person who snoozed it gets a reminder: a pop-up in the web page or the app (with **Snooze again** and **Open**), plus a notification from the Mac and iPhone app even when it's closed, and from the browser if you allowed notifications. The task goes back to its normal colour. **Wake up now** ends a snooze early; checking a task off ends it too. Snoozed tasks don't take a slot in Top Priorities and aren't counted as overdue.
+
+On an existing project, run `supabase/update-2026-11-snooze.sql` once in Supabase's SQL Editor; it adds `snoozed_until` and `snoozed_by` to tasks. Until then everything else keeps working and snoozing shows a message asking for the update.
+
 ## Weekly quote
 
 Each list shows a quote under the weekly theme. By default it's a built-in pick that changes every Monday and is the same for everyone on the list: 52 lines from Rumi, Emerson, Thoreau, Whitman, Gibran, Tagore, Lao Tzu, Marcus Aurelius, Seneca, John Muir and others. Owners and editors can press **Change quote** to search for a quote online, step through the picks or type their own, and can turn quotes off under List settings.

@@ -11,12 +11,14 @@ struct TaskEditor: View {
     @State private var typedOwner = ""
     @State private var typedPerson = ""
     @State private var confirmDelete = false
+    @State private var snoozeDays: Int
 
     init(original: TaskItem, isNew: Bool, onClose: @escaping () -> Void) {
         self.original = original
         self.isNew = isNew
         self.onClose = onClose
         _draft = State(initialValue: original)
+        _snoozeDays = State(initialValue: original.isSnoozed ? original.snoozeDaysLeft : TaskItem.defaultSnoozeDays)
     }
 
     private var editable: Bool { isNew || store.canEdit(original) }
@@ -36,6 +38,7 @@ struct TaskEditor: View {
                         .lineLimit(1...4)
                 }
                 detailsSection
+                snoozeSection
                 PeopleSection(draft: $draft, typedOwner: $typedOwner, typedPerson: $typedPerson)
                 Section("Notes") {
                     TextEditor(text: $draft.notes)
@@ -112,6 +115,32 @@ struct TaskEditor: View {
         }
     }
 
+    private var snoozeSection: some View {
+        Section {
+            Toggle("Snooze", isOn: Binding(
+                get: { draft.isSnoozed },
+                set: { on in
+                    if on { draft.snooze(days: snoozeDays, by: store.myID); SnoozeAlerts.requestPermission() } else { draft.wake() }
+                }
+            ))
+            .disabled(draft.done)
+            if draft.isSnoozed {
+                Stepper(value: Binding(
+                    get: { snoozeDays },
+                    set: { snoozeDays = $0; draft.snooze(days: $0, by: store.myID) }
+                ), in: 1...365) {
+                    Text("For \(SnoozeText.days(snoozeDays))")
+                }
+            }
+        } footer: {
+            if draft.isSnoozed, let end = draft.snoozeEnd {
+                Text("Greyed out until \(SnoozeText.until(end)), then you'll get a reminder.")
+            } else if !draft.done {
+                Text("Greys the task out for a few days and reminds you when it's over.")
+            }
+        }
+    }
+
     private func save() {
         if let person = Person.typed(typedOwner), draft.owner == nil { draft.owner = person }
         if let person = Person.typed(typedPerson), !draft.involves(person) { draft.shared.append(person) }
@@ -119,6 +148,7 @@ struct TaskEditor: View {
             draft.doneAt = original.doneAt
             draft.doneBy = original.doneBy
         }
+        if draft.done { draft.wake() }
         if isNew { store.add(draft) } else { store.save(draft) }
         onClose()
     }
