@@ -100,6 +100,7 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { }
         }
+        .modifier(SnoozeOverAlert())
         .onChange(of: store.categories) { _, categories in
             if case .category(let key) = selection, !categories.contains(where: { $0.key == key }) {
                 selection = .all

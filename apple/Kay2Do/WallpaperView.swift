@@ -215,6 +215,8 @@ private struct WallTaskRow: View {
                     .foregroundStyle(.orange)
             }
         }
+        .saturation(task.isSnoozed ? 0 : 1)
+        .opacity(task.isSnoozed ? 0.38 : 1)
     }
 
     private var meta: String {
@@ -224,6 +226,7 @@ private struct WallTaskRow: View {
         }
         if let owner = task.owner, owner != store.me { parts.append(store.name(of: owner)) }
         if let due = task.dueDate { parts.append(DueText.label(for: due)) }
+        if task.isSnoozed, let end = task.snoozeEnd { parts.append("Snoozed until " + SnoozeText.until(end)) }
         return parts.joined(separator: " · ")
     }
 }

@@ -105,6 +105,11 @@ create table if not exists public.tasks (
   updated_at   timestamptz not null default now()
 );
 
+-- Snoozed tasks are greyed out until snoozed_until. When that passes, the person
+-- who snoozed it (snoozed_by) gets a reminder and the apps clear both fields.
+alter table public.tasks add column if not exists snoozed_until timestamptz;
+alter table public.tasks add column if not exists snoozed_by uuid references auth.users (id) on delete set null;
+
 create index if not exists tasks_list_idx on public.tasks (list_id);
 create index if not exists categories_list_idx on public.categories (list_id);
 create index if not exists members_user_idx on public.list_members (user_id);

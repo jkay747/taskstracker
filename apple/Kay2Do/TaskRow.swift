@@ -9,6 +9,7 @@ struct TaskRow: View {
     @AppStorage(TextAppearance.fontKey) private var fontName = ""
     @AppStorage(TextAppearance.sizeKey) private var fontSize: Double = 0
     @AppStorage(TextAppearance.colorKey) private var fontColor = ""
+    @State private var pickSnooze = false
 
     private var editable: Bool { store.canEdit(task) }
     private var deletable: Bool { store.canDelete(task) }
@@ -54,6 +55,9 @@ struct TaskRow: View {
             .accessibilityLabel(task.priority ? "Remove from top priorities" : "Make a top priority")
         }
         .padding(.vertical, 2)
+        // Snoozed: faded grey until it wakes.
+        .saturation(task.isSnoozed ? 0 : 1)
+        .opacity(task.isSnoozed ? 0.38 : 1)
         .swipeActions(edge: .trailing) {
             if deletable {
                 Button(role: .destructive) {
@@ -61,6 +65,14 @@ struct TaskRow: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+            }
+            if editable && !task.done {
+                Button {
+                    if task.isSnoozed { store.wake(task) } else { store.snooze(task) }
+                } label: {
+                    Label(task.isSnoozed ? "Wake" : "Snooze", systemImage: task.isSnoozed ? "sun.max" : "moon.zzz")
+                }
+                .tint(.indigo)
             }
         }
         .swipeActions(edge: .leading) {
@@ -78,16 +90,28 @@ struct TaskRow: View {
             if editable {
                 Button(task.done ? "Mark Not Done" : "Mark Done") { store.toggleDone(task) }
                 Button(task.priority ? "Remove from Top Priorities" : "Make Top Priority") { store.toggleStar(task) }
+                if !task.done {
+                    Divider()
+                    SnoozeMenuItems(task: task) { pickSnooze = true }
+                }
             }
             if deletable {
                 Divider()
                 Button("Delete", role: .destructive) { store.delete(task) }
             }
         }
+        .sheet(isPresented: $pickSnooze) {
+            SnoozeSheet(task: task) { pickSnooze = false }
+                .environmentObject(store)
+        }
     }
 
     private var meta: some View {
         HStack(spacing: 10) {
+            if task.isSnoozed, let end = task.snoozeEnd {
+                Label("Snoozed until " + SnoozeText.until(end), systemImage: "moon.zzz")
+                    .labelStyle(.titleAndIcon)
+            }
             if showCategory, let category {
                 HStack(spacing: 4) {
                     CategorySwatch(colorIndex: category.color, size: 8)
@@ -117,7 +141,7 @@ struct TaskRow: View {
     }
 
     private var hasMeta: Bool {
-        (showCategory && category != nil) || task.owner != nil || task.dueDate != nil
+        task.isSnoozed || (showCategory && category != nil) || task.owner != nil || task.dueDate != nil
             || !task.shared.isEmpty || !task.notes.isEmpty || (task.done && task.doneBy != nil)
     }
 }

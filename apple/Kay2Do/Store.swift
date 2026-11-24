@@ -23,6 +23,8 @@ final class Store: ObservableObject {
     @Published private(set) var myName = ""
     @Published var errorMessage: String?
     @Published private(set) var notice: String?
+    /// Tasks you snoozed whose snooze just ended, for the "Snooze is over" alert.
+    @Published var wokenTasks: [TaskItem] = []
 
     private(set) var backend: Backend?
     private var writeChain: Task<Void, Never>?
@@ -30,6 +32,8 @@ final class Store: ObservableObject {
     private var writeGeneration = 0
     private var poller: Task<Void, Never>?
     private var weekSave: Task<Void, Never>?
+    private var wakeSeen = Set<String>()
+    private var snoozedShown = 0
 
     var myID: String { backend?.session?.userID ?? "" }
     var myEmail: String { backend?.session?.email ?? "" }
@@ -113,6 +117,7 @@ final class Store: ObservableObject {
 
     func signOut() async {
         stopPolling()
+        SnoozeAlerts.sync([])
         await backend?.signOut()
         clear()
         if backend != nil { phase = .signedOut }
@@ -205,6 +210,7 @@ final class Store: ObservableObject {
         if let index = lists.firstIndex(where: { $0.id == row.id }), lists[index].name != row.name {
             lists[index].name = row.name
         }
+        checkSnoozes()
     }
 
     func refreshNow() {
@@ -227,6 +233,7 @@ final class Store: ObservableObject {
                 } catch {
                     // A missed refresh is fine; the next one will catch up.
                 }
+                self.checkSnoozes()
             }
         }
     }
@@ -280,6 +287,10 @@ final class Store: ObservableObject {
             return
         }
         let detail = error.localizedDescription
+        if detail.contains("snoozed_until") || detail.contains("snoozed_by") {
+            errorMessage = "Couldn't \(action). Snoozing needs a one-time database update: run supabase/update-2026-11-snooze.sql in Supabase's SQL Editor."
+            return
+        }
         if detail.contains("completed_mode") || detail.contains("completed_days") {
             errorMessage = "Couldn't \(action). Your database needs a one-time update for this setting: run supabase/update-2026-11-completed-tasks.sql in Supabase's SQL Editor."
             return
@@ -468,6 +479,61 @@ final class Store: ObservableObject {
         var copy = task
         copy.priority.toggle()
         save(copy)
+    }
+
+    // MARK: Snooze
+
+    /// Greys the task out for `days` days (it wakes at 9 AM on the last one) and
+    /// reminds you when it's over.
+    func snooze(_ task: TaskItem, days: Int = TaskItem.defaultSnoozeDays) {
+        guard canEdit(task), !task.done else { return }
+        var copy = task
+        copy.snooze(days: days, by: myID)
+        SnoozeAlerts.requestPermission()
+        save(copy)
+        checkSnoozes()
+    }
+
+    func wake(_ task: TaskItem) {
+        guard task.snoozedUntil != nil else { return }
+        var copy = task
+        copy.wake()
+        save(copy)
+        checkSnoozes()
+    }
+
+    /// Ends snoozes that are due: yours get the "Snooze is over" alert and are cleared
+    /// for everyone; other people's just show normally again until their own app clears
+    /// them. Also keeps the system notifications for your snoozes in step. Runs after
+    /// every refresh.
+    func checkSnoozes() {
+        guard listID != nil, !myID.isEmpty else { return }
+        let now = Date()
+        var shown = 0
+        for task in tasks {
+            guard let end = task.snoozeEnd else { continue }
+            if end > now {
+                if !task.done { shown += 1 }
+                continue
+            }
+            guard task.snoozedBy == myID, wakeSeen.insert(task.id + "@" + (task.snoozedUntil ?? "")).inserted else { continue }
+            if !task.done, !wokenTasks.contains(where: { $0.id == task.id }) { wokenTasks.append(task) }
+            var copy = task
+            copy.wake()
+            save(copy)
+        }
+        if shown != snoozedShown {
+            snoozedShown = shown
+            objectWillChange.send()   // redraws rows whose snooze ran out
+        }
+        SnoozeAlerts.sync(tasks.filter { $0.snoozedBy == myID && $0.isSnoozed })
+    }
+
+    /// From the "Snooze is over" alert.
+    func snoozeWokenAgain(days: Int = TaskItem.defaultSnoozeDays) {
+        let ids = Set(wokenTasks.map(\.id))
+        wokenTasks = []
+        for task in tasks where ids.contains(task.id) { snooze(task, days: days) }
     }
 
     // MARK: People

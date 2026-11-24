@@ -202,6 +202,14 @@ struct TaskItem: Codable, Identifiable, Equatable {
     var createdAt: String?
     var doneAt: String?
     var doneBy: String?
+    /// While set and in the future, the task is snoozed: greyed out until then. When it
+    /// passes, the person who snoozed it (snoozedBy) gets a reminder and both are cleared.
+    var snoozedUntil: String?
+    var snoozedBy: String?
+    /// True when the database has the snooze columns (supabase/update-2026-11-snooze.sql)
+    /// or the task was snoozed here; only then are the snooze fields sent, so a list that
+    /// hasn't run the update keeps saving normally. Not stored.
+    var sendsSnooze = false
 
     enum CodingKeys: String, CodingKey {
         case id, title, notes, done, priority, due, owner, shared
@@ -211,6 +219,8 @@ struct TaskItem: Codable, Identifiable, Equatable {
         case createdAt = "created_at"
         case doneAt = "done_at"
         case doneBy = "done_by"
+        case snoozedUntil = "snoozed_until"
+        case snoozedBy = "snoozed_by"
     }
 
     init(id: String, listID: String, categoryKey: String?, title: String, createdBy: String) {
@@ -246,6 +256,9 @@ struct TaskItem: Codable, Identifiable, Equatable {
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt)
         doneBy = try c.decodeIfPresent(String.self, forKey: .doneBy)?.lowercased()
+        sendsSnooze = c.contains(.snoozedUntil)
+        snoozedUntil = try c.decodeIfPresent(String.self, forKey: .snoozedUntil)
+        snoozedBy = try c.decodeIfPresent(String.self, forKey: .snoozedBy)?.lowercased()
     }
 
     /// What the app writes. Empty values are sent as null so a cleared due
@@ -265,6 +278,10 @@ struct TaskItem: Codable, Identifiable, Equatable {
         if let createdBy { try c.encode(createdBy, forKey: .createdBy) }
         try c.encode(doneAt, forKey: .doneAt)
         try c.encode(doneBy, forKey: .doneBy)
+        if sendsSnooze || snoozedUntil != nil {
+            try c.encode(snoozedUntil, forKey: .snoozedUntil)
+            try c.encode(snoozedUntil == nil ? nil : snoozedBy, forKey: .snoozedBy)
+        }
     }
 
     var dueDate: Date? { DayString.date(due) }
@@ -280,8 +297,46 @@ struct TaskItem: Codable, Identifiable, Equatable {
     }
     var people: [Person] { (owner.map { [$0] } ?? []) + shared }
 
+    // MARK: Snooze
+
+    static let defaultSnoozeDays = 5
+
+    /// Snoozes end at 9 AM, `days` days from today.
+    static func snoozeEnd(days: Int, from now: Date = Date()) -> Date {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: min(max(days, 1), 365), to: calendar.startOfDay(for: now)) ?? now
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) ?? day
+    }
+
+    var snoozeEnd: Date? { Timestamp.parse(snoozedUntil) }
+
+    /// Snoozed and not yet due to wake. A checked-off task is never shown as snoozed.
+    var isSnoozed: Bool {
+        guard !done, let end = snoozeEnd else { return false }
+        return end > Date()
+    }
+
+    /// Whole days from today to the day it wakes, at least 1.
+    var snoozeDaysLeft: Int {
+        guard let end = snoozeEnd else { return TaskItem.defaultSnoozeDays }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: end)).day ?? 1
+        return max(1, days)
+    }
+
+    mutating func snooze(days: Int, by userID: String) {
+        snoozedUntil = Timestamp.string(TaskItem.snoozeEnd(days: days))
+        snoozedBy = userID
+        sendsSnooze = true
+    }
+
+    mutating func wake() {
+        snoozedUntil = nil
+        snoozedBy = nil
+    }
+
     var isLate: Bool {
-        guard !done, let due = dueDate else { return false }
+        guard !done, !isSnoozed, let due = dueDate else { return false }
         return due < Calendar.current.startOfDay(for: Date())
     }
 
@@ -293,6 +348,7 @@ struct TaskItem: Codable, Identifiable, Equatable {
         done = value
         doneAt = value ? Timestamp.string(Date()) : nil
         doneBy = value ? userID : nil
+        if value { wake() }
     }
 
     /// Starred first; then soonest due date; then oldest. Done or not doesn't move a
